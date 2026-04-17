@@ -1,4 +1,11 @@
-import { pgTable, serial, text, timestamp, integer } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { messages } from './messages.schema';
 
 export const attachments = pgTable('attachments', {
@@ -8,7 +15,7 @@ export const attachments = pgTable('attachments', {
     .references(() => messages.id, { onDelete: 'cascade' }),
   originalName: text('original_name').notNull(),
   mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
+  size: bigint('size', { mode: 'number' }).notNull(),
   storagePath: text('storage_path').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

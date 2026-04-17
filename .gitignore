@@ -8,4 +8,3 @@ uploads
 apps/*/node_modules
 apps/*/.next
 apps/*/dist
-apps/server/drizzle

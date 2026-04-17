@@ -82,7 +82,7 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
     "remoteClient": "disabled"
   },
   "uploads": {
-    "maxBytes": 26214400
+    "maxBytes": 10737418240
   },
   "attachments": {
     "requiresAuth": true
@@ -173,18 +173,38 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 - `GET /timeline?before=<id>&limit=<n>`
 - `POST /messages/text`
 - `POST /messages/link`
-- `POST /attachments/upload`
+- `POST /uploads`
+- `HEAD /uploads/:id`
+- `PATCH /uploads/:id`
+- `DELETE /uploads/:id`
 - `GET /attachments/:id`
 
 其中：
 
-- `POST /attachments/upload`
-  - 当前上传上限是 `25 MiB`
+- `/uploads*`
+  - 使用 tus resumable upload 协议
+  - 受保护接口，继续统一接受 cookie 与 bearer
+  - 内建 Web 统一请求同源 `/api/uploads*`，再由 Next.js rewrite 代理到 `/uploads*`
+  - 服务端在上传完成后自动创建 message 与 attachment
+  - `uploads.maxBytes` 表示单个文件总大小上限，当前默认是 `10 GiB`
 - `GET /attachments/:id`
   - 当前仍要求认证
   - 不使用签名 URL
   - 内建 Web 走 cookie
   - 远程客户端走 bearer
+
+当前不再保留 `POST /attachments/upload`。
+
+内建 Web 的上传链路现在是：
+
+- `POST /api/uploads`
+  - 创建 tus upload
+- `HEAD /api/uploads/:id`
+  - 查询断点续传 offset
+- `PATCH /api/uploads/:id`
+  - 继续上传分片
+- `DELETE /api/uploads/:id`
+  - 终止未完成上传
 
 ## 本地开发验证
 

@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import * as tus from 'tus-js-client';
 import { apiFetch, resolveApiUrl, type TimelineItem } from '../lib/api';
 
 type SessionResponse = {
@@ -17,6 +18,46 @@ type TimelineResponse = {
   hasMore: boolean;
 };
 
+type UploadState = {
+  fileName: string;
+  bytesSent: number;
+  bytesTotal: number;
+};
+
+const TUS_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
+const TUS_RETRY_DELAYS_MS = [0, 1000, 3000, 5000];
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KiB`;
+  }
+
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  }
+
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+}
+
+function getUploadErrorMessage(error: unknown) {
+  if (error instanceof tus.DetailedError) {
+    const body = error.originalResponse?.getBody()?.trim();
+    if (body) {
+      return body;
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return '上传失败';
+}
+
 export function ChatClient() {
   const router = useRouter();
   const [deviceName, setDeviceName] = useState('');
@@ -28,6 +69,7 @@ export function ChatClient() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [uploadState, setUploadState] = useState<UploadState | null>(null);
   const [error, setError] = useState('');
   const timelineRef = useRef<HTMLElement | null>(null);
   const pendingScrollOffsetRef = useRef<number | null>(null);
@@ -130,6 +172,53 @@ export function ChatClient() {
     }
   }
 
+  function uploadFile(file: File) {
+    return new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: resolveApiUrl('/uploads'),
+        chunkSize: TUS_CHUNK_SIZE_BYTES,
+        retryDelays: TUS_RETRY_DELAYS_MS,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          filename: file.name,
+          filetype: file.type || 'application/octet-stream',
+        },
+        onBeforeRequest(request) {
+          const xhr = request.getUnderlyingObject();
+          if (xhr && 'withCredentials' in xhr) {
+            xhr.withCredentials = true;
+          }
+        },
+        onProgress(bytesSent, bytesTotal) {
+          setUploadState({
+            fileName: file.name,
+            bytesSent,
+            bytesTotal,
+          });
+        },
+        onError(uploadError) {
+          reject(uploadError);
+        },
+        onSuccess() {
+          resolve();
+        },
+      });
+
+      void upload
+        .findPreviousUploads()
+        .then((previousUploads) => {
+          if (previousUploads.length > 0) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
+
+          upload.start();
+        })
+        .catch((uploadError) => {
+          reject(uploadError);
+        });
+    });
+  }
+
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -172,22 +261,20 @@ export function ChatClient() {
 
     setBusy(true);
     setError('');
+    setUploadState({
+      fileName: file.name,
+      bytesSent: 0,
+      bytesTotal: file.size,
+    });
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const item = await apiFetch<TimelineItem>('/attachments/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
       shouldScrollToBottomRef.current = true;
-      setItems((current) => [...current, item]);
-      setCursor(item.id);
+      await uploadFile(file);
+      await refresh();
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : '上传失败');
+      setError(getUploadErrorMessage(uploadError));
     } finally {
+      setUploadState(null);
       setBusy(false);
     }
   }
@@ -201,6 +288,15 @@ export function ChatClient() {
       setBusy(false);
     }
   }
+
+  const uploadPercent = uploadState
+    ? Math.min(
+        100,
+        Math.round(
+          (uploadState.bytesSent / Math.max(uploadState.bytesTotal, 1)) * 100,
+        ),
+      )
+    : 0;
 
   if (loading) {
     return (
@@ -330,7 +426,7 @@ export function ChatClient() {
 
             <div className="flex flex-wrap items-center gap-3">
               <label className="rounded-full border border-stone-300 px-4 py-2 text-sm text-stone-700">
-                上传图片
+                {uploadState ? '上传中...' : '上传图片'}
                 <input
                   accept="image/*"
                   className="hidden"
@@ -341,7 +437,7 @@ export function ChatClient() {
               </label>
 
               <label className="rounded-full border border-stone-300 px-4 py-2 text-sm text-stone-700">
-                上传文件
+                {uploadState ? '上传中...' : '上传文件'}
                 <input
                   className="hidden"
                   disabled={busy}
@@ -358,6 +454,14 @@ export function ChatClient() {
                 发送
               </button>
             </div>
+
+            {uploadState ? (
+              <p className="text-sm text-stone-500">
+                正在上传 {uploadState.fileName} · {uploadPercent}% (
+                {formatBytes(uploadState.bytesSent)} /{' '}
+                {formatBytes(uploadState.bytesTotal)})
+              </p>
+            ) : null}
 
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </form>

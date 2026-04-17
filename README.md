@@ -4,7 +4,7 @@
 
 当前仓库只包含可运行的最小骨架：
 
-- `apps/server`: NestJS + Drizzle + PostgreSQL + Multer
+- `apps/server`: NestJS + Drizzle + PostgreSQL + `@tus/server`
 - `apps/web`: Next.js App Router + Tailwind CSS
 
 如果你是新接手的工程师或 AI，请先看：
@@ -118,6 +118,7 @@ Web 现在统一请求同源 `/api/*`，再由 Next.js 代理到 `SERVER_INTERNA
 - 粘贴链接后按链接消息发送
 - 上传图片
 - 上传普通文件
+- 内建 Web 现在使用 tus 可恢复上传
 - 首次进入只加载最近一页 timeline
 - 顶部按钮懒加载更早消息
 - 手动刷新拉取最新消息
@@ -153,6 +154,17 @@ Web 现在统一请求同源 `/api/*`，再由 Next.js 代理到 `SERVER_INTERNA
 - `GET /attachments/:id`
   - 继续复用同一认证模型，不单独引入下载 token 或签名 URL
 
+## 附件上传
+
+- 内建 Web 已移除 `POST /attachments/upload`
+- 浏览器统一请求同源 `/api/uploads`
+- Next.js rewrite 会把 `/api/uploads*` 代理到 NestJS 的 `/uploads*`
+- tus 的创建、续传、完成请求继续依赖浏览器自动携带 `sts_session` HttpOnly cookie
+- 上传完成后服务端会自动创建 message 与 attachment，timeline 刷新后即可看到文件消息
+- `uploads.maxBytes` 表示单个文件的总大小上限，当前默认是 `10 GiB`
+- Web 端当前使用 `8 MiB` chunk 进行分片上传
+- `attachments.size` 和 `upload_sessions.size` 都已改为 PostgreSQL `bigint`
+
 ## 远程客户端与 CORS
 
 - `REMOTE_CLIENT_ENABLED`
@@ -181,7 +193,10 @@ Web 现在统一请求同源 `/api/*`，再由 Next.js 代理到 `SERVER_INTERNA
 - `GET /timeline?before=<id>&limit=<n>`
 - `POST /messages/text`
 - `POST /messages/link`
-- `POST /attachments/upload`
+- `POST /uploads`
+- `HEAD /uploads/:id`
+- `PATCH /uploads/:id`
+- `DELETE /uploads/:id`
 - `GET /attachments/:id`
 
 受保护接口同时支持两种 token 承载方式：
@@ -222,7 +237,8 @@ Web 聊天页现在的行为是：
 - 首次进入只拉最近一页
 - 顶部显示“加载更早消息”按钮，点击后请求 `before`
 - “手动刷新”继续请求 `after=<latestId>`
-- 新发送文本、链接、图片、文件后，仍然直接追加到底部显示
+- 新发送文本、链接后仍直接追加到底部显示
+- 新上传图片、文件后会在 tus 上传完成后刷新 timeline 并滚动到底部
 
 当前 revoke/version 机制是：
 
@@ -238,7 +254,7 @@ Web 聊天页现在的行为是：
 浏览器侧无需手动处理 token：
 
 - `POST /api/auth/login` 登录后，NestJS 会写入 `sts_session` HttpOnly cookie
-- 后续 `/api/auth/session`、`/api/timeline`、`/api/messages/*`、`/api/attachments/upload` 会自动带上 cookie
+- 后续 `/api/auth/session`、`/api/timeline`、`/api/messages/*`、`/api/uploads*` 会自动带上 cookie
 
 如果要在命令行验证 cookie 链路，可以这样做：
 
@@ -314,7 +330,8 @@ pnpm --filter server test:e2e
 - 登录后首次进入聊天页，只看到最近一页消息，而不是全量历史
 - 点击聊天页顶部“加载更早消息”，继续拿到更旧的消息
 - 点击“手动刷新”，只追加最新消息，不重置已加载历史
-- 发送文本、链接、图片、文件后，消息仍正常出现在列表底部
+- 发送文本、链接后，消息仍正常出现在列表底部
+- 上传图片、文件时能看到基础进度，成功后 timeline 会刷新出新文件消息
 - `GET /client/bootstrap` 能正确反映 `REMOTE_CLIENT_ENABLED`
 - `REMOTE_CLIENT_ENABLED=false` 时，`POST /auth/token` 与 Bearer 访问受保护接口会被拒绝
 - `GET /attachments/:id` 仍要求统一认证：

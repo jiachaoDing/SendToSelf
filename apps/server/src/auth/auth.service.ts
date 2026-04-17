@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Inject,
   Injectable,
   OnModuleInit,
@@ -6,18 +7,22 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import type { Request } from 'express';
 import { eq } from 'drizzle-orm';
 import { compare, hash } from 'bcryptjs';
+import { ClientConfigService } from '../client/client-config.service';
 import { DATABASE } from '../database/database.module';
 import type { Database } from '../database/database.module';
 import { appConfig } from '../database/schema';
 import { DevicesService } from '../devices/devices.service';
+import { extractRequestAuth } from './auth-token.util';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly configService: ConfigService,
+    private readonly clientConfigService: ClientConfigService,
     private readonly devicesService: DevicesService,
     private readonly jwtService: JwtService,
   ) {}
@@ -94,6 +99,19 @@ export class AuthService implements OnModuleInit {
 
       throw new UnauthorizedException('Invalid session');
     }
+  }
+
+  async authenticateRequest(request: Request) {
+    const { token, source } = extractRequestAuth(request);
+
+    if (
+      source === 'bearer' &&
+      !this.clientConfigService.isRemoteClientEnabled()
+    ) {
+      throw new ForbiddenException('Remote clients are disabled');
+    }
+
+    return this.validateToken(token ?? '');
   }
 
   async revokeToken(token?: string) {

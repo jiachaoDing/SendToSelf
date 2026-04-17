@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export const SERVER_VERSION = '0.0.1';
-export const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+export const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
 
 function parseOrigins(value: string) {
   return value
