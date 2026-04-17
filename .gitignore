@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+coverage
+uploads
+.env
+.env.local
+apps/*/node_modules
+apps/*/.next
+apps/*/dist
+apps/server/drizzle
