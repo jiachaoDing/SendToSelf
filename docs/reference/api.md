@@ -1,20 +1,26 @@
-# API
+# API Reference
 
-本文档是当前服务端接口、认证语义和远程客户端接入边界的唯一说明，供未来 Web / 移动端 / 桌面端客户端开发使用。
+本文档说明当前服务端接口、认证语义，以及远程客户端接入边界。
 
-## 客户端定位
+需要特别说明的是：当前仓库里真正实现并可直接使用的前端只有 Built-in Web。文档中与远程客户端相关的接口和配置，主要是为后续独立客户端预留的接入约定，并不代表仓库当前已经提供远程客户端实现。
 
-- 内建 Web
-  - 实例自带前端
-  - 浏览器统一请求同源 `/api/*`
-  - Next.js 再把 `/api/*` 代理到 NestJS
-  - 认证承载使用 HttpOnly cookie
-- 远程客户端
-  - 直接连接 NestJS
-  - 认证承载使用 Bearer token
-  - 远程浏览器客户端会额外受 CORS 约束
+## Client Types
 
-## 认证与远程访问
+### Built-in Web
+
+- 实例自带前端
+- 浏览器统一请求同源 `/api/*`
+- Next.js 再把 `/api/*` 代理到 NestJS
+- 认证承载使用 HttpOnly cookie
+
+### Remote Client
+
+- 直接连接 NestJS
+- 认证承载使用 Bearer token
+- 远程浏览器客户端会额外受 CORS 约束
+- 当前仍未提供官方远程客户端实现
+
+## Auth and Remote Access
 
 - `POST /auth/login`
   - 内建 Web 的 cookie 登录入口
@@ -34,7 +40,7 @@
     - cookie 仍可用
     - bearer 会被拒绝
 
-JWT payload 当前只包含：
+JWT payload 当前包含：
 
 - `deviceId`
 - `authVersion`
@@ -48,7 +54,7 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 - 内建 Web 通过同源 `/api/*` 访问
 - curl / PowerShell / 原生客户端等无浏览器同源策略的请求
 
-配置语义：
+相关配置：
 
 - `REMOTE_CLIENT_ENABLED`
   - 是否允许远程客户端接入
@@ -166,7 +172,7 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 
 返回当前会话对应的设备信息。
 
-## Timeline / Message / Attachment API
+## Timeline, Message, Attachment API
 
 - `GET /timeline`
 - `GET /timeline?after=<id>`
@@ -195,44 +201,21 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 
 当前不再保留 `POST /attachments/upload`。
 
-内建 Web 的上传链路现在是：
+## Timeline Behavior
 
-- `POST /api/uploads`
-  - 创建 tus upload
-- `HEAD /api/uploads/:id`
-  - 查询断点续传 offset
-- `PATCH /api/uploads/:id`
-  - 继续上传分片
-- `DELETE /api/uploads/:id`
-  - 终止未完成上传
+- `GET /timeline`
+  - 默认只返回最近一页消息
+  - 默认页大小是 `50`
+  - 返回顺序仍然是消息 `id` 升序
+- `GET /timeline?before=<id>&limit=<n>`
+  - 返回 `<id>` 之前的更旧消息
+  - 适合前端做“加载更早消息”
+- `GET /timeline?after=<id>`
+  - 保留增量同步语义
+  - 只返回比 `<id>` 更新的消息
 
-## 本地开发验证
+timeline 响应当前包含：
 
-### 验证远程访问关闭
-
-```powershell
-Invoke-RestMethod -Method GET -Uri http://localhost:4000/client/bootstrap
-Invoke-RestMethod -Method POST -Uri http://localhost:4000/auth/token `
-  -ContentType 'application/json' `
-  -Body '{"password":"change-me","deviceName":"Remote Smoke"}'
-```
-
-预期：
-
-- bootstrap 返回 `remoteClient.enabled=false`
-- `/auth/token` 返回 `403`
-
-### 验证远程访问开启
-
-在 `apps/server/.env` 中设置：
-
-```env
-REMOTE_CLIENT_ENABLED=true
-REMOTE_CLIENT_ALLOWED_ORIGINS=http://localhost:5173
-```
-
-然后重启 server，再验证：
-
-- bootstrap 返回 `remoteClient.enabled=true`
-- `/auth/token` 可正常返回 Bearer token
-- 来自 `http://localhost:5173` 的浏览器跨域请求可通过 CORS
+- `items`
+- `nextCursor`
+- `hasMore`

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0c0a09" />
+    <title>Send to Self</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #f5f5f4;
+        color: #1c1917;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        background:
+          radial-gradient(circle at top, rgba(28, 25, 23, 0.06), transparent 30%),
+          #f5f5f4;
+      }
+
+      main {
+        display: flex;
+        min-height: 100vh;
+        min-height: 100dvh;
+        flex-direction: column;
+        padding:
+          max(env(safe-area-inset-top), 16px)
+          16px
+          max(env(safe-area-inset-bottom), 16px);
+      }
+
+      .shell {
+        margin: 0 auto;
+        display: flex;
+        width: 100%;
+        max-width: 960px;
+        flex: 1;
+        flex-direction: column;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid #e7e5e4;
+        padding: 8px 0 16px;
+      }
+
+      .brand-icon {
+        display: grid;
+        height: 44px;
+        width: 44px;
+        place-items: center;
+        border-radius: 14px;
+        background: #0c0a09;
+        color: #fafaf9;
+        box-shadow: 0 8px 24px rgba(28, 25, 23, 0.16);
+      }
+
+      .brand-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+
+      .brand-subtitle {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: #78716c;
+      }
+
+      .panel {
+        margin: auto 0;
+        border: 1px solid #e7e5e4;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 28px 22px;
+        box-shadow: 0 24px 60px rgba(28, 25, 23, 0.08);
+        backdrop-filter: blur(10px);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        background: #f5f5f4;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #57534e;
+      }
+
+      .badge::before {
+        content: "";
+        height: 8px;
+        width: 8px;
+        border-radius: 999px;
+        background: #f59e0b;
+      }
+
+      h2 {
+        margin: 18px 0 10px;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.6;
+        color: #57534e;
+      }
+
+      .list {
+        margin: 18px 0 0;
+        padding-left: 18px;
+        color: #57534e;
+      }
+
+      .list li + li {
+        margin-top: 8px;
+      }
+
+      .actions {
+        margin-top: 22px;
+        display: flex;
+        gap: 12px;
+      }
+
+      button,
+      a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 0;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button {
+        background: #0c0a09;
+        color: #fafaf9;
+      }
+
+      a {
+        background: #f5f5f4;
+        color: #292524;
+      }
+
+      .footer {
+        padding-top: 18px;
+        font-size: 12px;
+        color: #a8a29e;
+        text-align: center;
+      }
+
+      @media (max-width: 640px) {
+        .panel {
+          border-radius: 24px;
+          padding: 24px 18px;
+        }
+
+        h2 {
+          font-size: 24px;
+        }
+
+        .actions {
+          flex-direction: column;
+        }
+
+        button,
+        a {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="shell">
+        <header class="header">
+          <div class="brand-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 19L21 21L12 3L3 21L12 19ZM12 19V11"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div>
+            <h1 class="brand-title">Send to Self</h1>
+            <p class="brand-subtitle">离线应用壳已打开</p>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="badge">当前离线</div>
+          <h2>应用可以打开，但网络能力暂不可用。</h2>
+          <p>
+            你现在看到的是本地缓存的应用壳。恢复网络后，可以继续查看最新消息、发送文本、上传图片或文件。
+          </p>
+          <ul class="list">
+            <li>当前无法刷新消息时间线</li>
+            <li>当前无法发送消息、上传文件或登录</li>
+            <li>恢复联网后点击“重试连接”即可回到正常应用</li>
+          </ul>
+          <div class="actions">
+            <button type="button" id="retry-button">重试连接</button>
+            <a href="/">返回首页</a>
+          </div>
+        </section>
+
+        <p class="footer">Send to Self PWA Offline Shell</p>
+      </div>
+    </main>
+    <script>
+      document.getElementById('retry-button')?.addEventListener('click', function () {
+        window.location.reload();
+      });
+    </script>
+  </body>
+</html>

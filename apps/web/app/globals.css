@@ -6,6 +6,11 @@
   color-scheme: light;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   @apply bg-stone-100 text-stone-900;
 }
