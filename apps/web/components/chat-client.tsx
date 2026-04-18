@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as tus from 'tus-js-client';
 import { apiFetch, resolveApiUrl, type TimelineItem } from '../lib/api';
@@ -22,6 +22,15 @@ type UploadState = {
   fileName: string;
   bytesSent: number;
   bytesTotal: number;
+  currentIndex: number;
+  totalCount: number;
+};
+
+type PendingAttachment = {
+  id: string;
+  file: File;
+  kind: 'image' | 'file';
+  previewUrl: string | null;
 };
 
 type MessageNode = {
@@ -49,6 +58,26 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function getPendingAttachmentKind(file: File) {
+  return file.type.startsWith('image/') ? 'image' : 'file';
+}
+
+function revokePendingAttachmentPreview(attachment: PendingAttachment) {
+  if (attachment.previewUrl) {
+    URL.revokeObjectURL(attachment.previewUrl);
+  }
+}
+
+function hasFilesInTransfer(dataTransfer: DataTransfer | null) {
+  if (!dataTransfer) return false;
+
+  if (dataTransfer.items.length > 0) {
+    return Array.from(dataTransfer.items).some((item) => item.kind === 'file');
+  }
+
+  return dataTransfer.files.length > 0;
 }
 
 function getUploadErrorMessage(error: unknown) {
@@ -276,13 +305,20 @@ export function ChatClient() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState('');
   
   const timelineRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingScrollOffsetRef = useRef<number | null>(null);
   const shouldScrollToBottomRef = useRef(false);
+  const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
+  const attachmentSequenceRef = useRef(0);
+  const dragDepthRef = useRef(0);
 
   useEffect(() => {
     async function initialize() {
@@ -327,12 +363,23 @@ export function ChatClient() {
     }
   }, [text]);
 
-  async function refresh() {
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+
+  useEffect(() => {
+    return () => {
+      pendingAttachmentsRef.current.forEach(revokePendingAttachmentPreview);
+    };
+  }, []);
+
+  async function refresh(afterOverride?: number | null) {
     setError('');
     setRefreshing(true);
     try {
-      const reset = cursor === null;
-      const query = reset ? '' : `?after=${cursor}`;
+      const effectiveCursor = afterOverride ?? cursor;
+      const reset = effectiveCursor === null;
+      const query = reset ? '' : `?after=${effectiveCursor}`;
       const data = await apiFetch<TimelineResponse>(`/timeline${query}`);
 
       setItems((current) => (reset ? data.items : [...current, ...data.items]));
@@ -371,7 +418,53 @@ export function ChatClient() {
     }
   }
 
-  function uploadFile(file: File) {
+  function appendPendingFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter((file): file is File => file instanceof File);
+    if (files.length === 0) return;
+
+    const attachments: PendingAttachment[] = files.map((file) => ({
+      id: `pending-${attachmentSequenceRef.current += 1}`,
+      file,
+      kind: getPendingAttachmentKind(file),
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
+
+    setPendingAttachments((current) => [
+      ...current,
+      ...attachments,
+    ]);
+  }
+
+  function removePendingAttachment(attachmentId: string) {
+    setPendingAttachments((current) => {
+      const attachment = current.find((item) => item.id === attachmentId);
+      if (attachment) {
+        revokePendingAttachmentPreview(attachment);
+      }
+
+      return current.filter((item) => item.id !== attachmentId);
+    });
+  }
+
+  function clearPendingAttachments() {
+    setPendingAttachments((current) => {
+      current.forEach(revokePendingAttachmentPreview);
+      return [];
+    });
+  }
+
+  async function appendTimelineAfter(afterId: number | null) {
+    const data = await apiFetch<TimelineResponse>(
+      afterId === null ? '/timeline' : `/timeline?after=${afterId}`,
+    );
+
+    shouldScrollToBottomRef.current = true;
+    setItems((current) => (afterId === null ? data.items : [...current, ...data.items]));
+    setCursor(data.nextCursor);
+    return data.nextCursor;
+  }
+
+  function uploadFile(file: File, currentIndex: number, totalCount: number) {
     return new Promise<void>((resolve, reject) => {
       const upload = new tus.Upload(file, {
         endpoint: resolveApiUrl('/uploads'),
@@ -389,7 +482,7 @@ export function ChatClient() {
           }
         },
         onProgress(bytesSent, bytesTotal) {
-          setUploadState({ fileName: file.name, bytesSent, bytesTotal });
+          setUploadState({ fileName: file.name, bytesSent, bytesTotal, currentIndex, totalCount });
         },
         onError(uploadError) {
           reject(uploadError);
@@ -409,59 +502,134 @@ export function ChatClient() {
     });
   }
 
-  async function submitMessage() {
-    const value = text.trim();
-    if (!value) return;
-
-    setBusy(true);
-    setError('');
-
-    try {
-      const path = /^https?:\/\//i.test(value) ? '/messages/link' : '/messages/text';
-      const key = path.endsWith('/link') ? 'url' : 'text';
-      const item = await apiFetch<TimelineItem>(path, {
-        method: 'POST',
-        body: JSON.stringify({ [key]: value }),
-      });
-
-      shouldScrollToBottomRef.current = true;
-      setItems((current) => [...current, item]);
-      setCursor(item.id);
-      setText('');
-      
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : '发送失败');
-    } finally {
-      setBusy(false);
-    }
+  async function submitMessage(value: string) {
+    const path = /^https?:\/\//i.test(value) ? '/messages/link' : '/messages/text';
+    const key = path.endsWith('/link') ? 'url' : 'text';
+    return apiFetch<TimelineItem>(path, {
+      method: 'POST',
+      body: JSON.stringify({ [key]: value }),
+    });
   }
 
   async function handleSend(event?: FormEvent<HTMLFormElement>) {
     if (event) event.preventDefault();
-    await submitMessage();
-  }
+    const value = text.trim();
+    const attachmentsToSend = [...pendingAttachments];
 
-  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+    if (!value && attachmentsToSend.length === 0) return;
 
     setBusy(true);
     setError('');
-    setUploadState({ fileName: file.name, bytesSent: 0, bytesTotal: file.size });
+
+    let nextCursor = cursor;
+    let uploadedAttachmentCount = 0;
 
     try {
-      shouldScrollToBottomRef.current = true;
-      await uploadFile(file);
-      await refresh();
-    } catch (uploadError) {
-      setError(getUploadErrorMessage(uploadError));
+      if (value) {
+        const item = await submitMessage(value);
+        shouldScrollToBottomRef.current = true;
+        setItems((current) => [...current, item]);
+        setCursor(item.id);
+        setText('');
+        nextCursor = item.id;
+
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      }
+
+      for (let index = 0; index < attachmentsToSend.length; index += 1) {
+        const attachment = attachmentsToSend[index];
+        setUploadState({
+          fileName: attachment.file.name,
+          bytesSent: 0,
+          bytesTotal: attachment.file.size,
+          currentIndex: index + 1,
+          totalCount: attachmentsToSend.length,
+        });
+        await uploadFile(attachment.file, index + 1, attachmentsToSend.length);
+        removePendingAttachment(attachment.id);
+        uploadedAttachmentCount += 1;
+      }
+
+      if (uploadedAttachmentCount > 0) {
+        nextCursor = await appendTimelineAfter(nextCursor);
+      }
+
+      if (attachmentsToSend.length === 0) {
+        clearPendingAttachments();
+      }
+    } catch (sendError) {
+      if (uploadedAttachmentCount > 0) {
+        try {
+          nextCursor = await appendTimelineAfter(nextCursor);
+        } catch {}
+      }
+
+      setError(getUploadErrorMessage(sendError));
     } finally {
       setUploadState(null);
       setBusy(false);
+    }
+  }
+
+  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    event.target.value = '';
+    if (files.length === 0) return;
+
+    setError('');
+    appendPendingFiles(files);
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file instanceof File);
+
+    if (files.length === 0) return;
+
+    event.preventDefault();
+    setError('');
+    appendPendingFiles(files);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilesInTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilesInTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilesInTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+
+    if (dragDepthRef.current === 0) {
+      setIsDragActive(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (!hasFilesInTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+    setError('');
+
+    if (event.dataTransfer.files.length > 0) {
+      appendPendingFiles(event.dataTransfer.files);
     }
   }
 
@@ -479,6 +647,7 @@ export function ChatClient() {
     ? Math.min(100, Math.round((uploadState.bytesSent / Math.max(uploadState.bytesTotal, 1)) * 100))
     : 0;
   const renderNodes = buildChatRenderNodes(items);
+  const canSend = !!text.trim() || pendingAttachments.length > 0;
 
   if (loading) {
     return (
@@ -605,20 +774,105 @@ export function ChatClient() {
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
       >
         <div className="mx-auto flex flex-col w-full max-w-4xl">
-          <form className="relative flex items-end gap-2 sm:gap-3" onSubmit={handleSend}>
+          <form
+            className={`relative rounded-3xl border transition-colors ${
+              isDragActive ? 'border-stone-400 bg-stone-50/80' : 'border-transparent'
+            }`}
+            onSubmit={handleSend}
+          >
+            <div
+              className="flex flex-col gap-3 rounded-3xl"
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-3 pt-3 sm:px-4 sm:pt-4">
+                  {pendingAttachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex max-w-full items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-left"
+                    >
+                      {attachment.kind === 'image' && attachment.previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={attachment.previewUrl}
+                          alt={attachment.file.name}
+                          className="h-12 w-12 rounded-xl border border-stone-200 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-600">
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                          </svg>
+                        </div>
+                      )}
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-stone-900">{attachment.file.name}</p>
+                        <p className="text-xs text-stone-500">
+                          {attachment.kind === 'image' ? '图片' : '文件'} · {formatBytes(attachment.file.size)}
+                        </p>
+                      </div>
+
+                      <button
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-white hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={busy}
+                        onClick={() => removePendingAttachment(attachment.id)}
+                        type="button"
+                        title="移除附件"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="relative flex items-end gap-2 px-1 pb-1 sm:gap-3 sm:px-2 sm:pb-2">
             <div className="flex flex-shrink-0 gap-1 pb-1 sm:pb-1.5">
-              <label className="group cursor-pointer rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50" title="上传图片">
-                <input accept="image/*" className="hidden" disabled={busy} onChange={(e) => void handleUpload(e)} type="file" />
+              <input
+                ref={imageInputRef}
+                accept="image/*"
+                className="hidden"
+                disabled={busy}
+                multiple
+                onChange={(e) => void handleUpload(e)}
+                type="file"
+              />
+              <button
+                className="group rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => imageInputRef.current?.click()}
+                type="button"
+                title="上传图片"
+              >
                 <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 002 2z" />
                 </svg>
-              </label>
-              <label className="group cursor-pointer rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50" title="上传文件">
-                <input className="hidden" disabled={busy} onChange={(e) => void handleUpload(e)} type="file" />
+              </button>
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                disabled={busy}
+                multiple
+                onChange={(e) => void handleUpload(e)}
+                type="file"
+              />
+              <button
+                className="group rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+                title="上传文件"
+              >
                 <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
-              </label>
+              </button>
             </div>
 
             <div className="relative flex-1">
@@ -627,15 +881,16 @@ export function ChatClient() {
                 className="block max-h-48 min-h-[44px] sm:min-h-[52px] w-full resize-none rounded-2xl border border-stone-200 bg-stone-50 py-3 sm:py-3.5 pl-4 pr-4 text-[15px] sm:text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:ring-0 focus:outline-none transition-colors"
                 disabled={busy}
                 onChange={(event) => setText(event.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (!busy && text.trim()) {
-                      void submitMessage();
+                    if (!busy && canSend) {
+                      void handleSend();
                     }
                   }
                 }}
-                placeholder="发送消息..."
+                placeholder={isDragActive ? '松开鼠标即可添加附件' : '发送消息...'}
                 rows={1}
                 value={text}
               />
@@ -643,7 +898,7 @@ export function ChatClient() {
 
             <button
               className="flex h-11 w-11 sm:h-[52px] sm:w-[52px] flex-shrink-0 items-center justify-center rounded-full bg-stone-900 text-white transition-transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
-              disabled={busy || (!text.trim() && !uploadState)}
+              disabled={busy || !canSend}
               type="submit"
               title="发送"
             >
@@ -651,6 +906,8 @@ export function ChatClient() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
+              </div>
+            </div>
           </form>
 
           {uploadState && (
@@ -659,7 +916,7 @@ export function ChatClient() {
                 <svg className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span className="truncate">正在上传: {uploadState.fileName}</span>
+                <span className="truncate">正在上传 {uploadState.currentIndex}/{uploadState.totalCount}: {uploadState.fileName}</span>
               </div>
               <span className="flex-shrink-0 font-medium text-stone-700">{uploadPercent}%</span>
             </div>
