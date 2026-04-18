@@ -1,297 +1,16 @@
 'use client';
 
-import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import * as tus from 'tus-js-client';
-import { apiFetch, resolveApiUrl, type TimelineItem } from '../lib/api';
-
-type SessionResponse = {
-  device: {
-    id: number;
-    name: string;
-  };
-};
-
-type TimelineResponse = {
-  items: TimelineItem[];
-  nextCursor: number | null;
-  hasMore: boolean;
-};
-
-type UploadState = {
-  fileName: string;
-  bytesSent: number;
-  bytesTotal: number;
-  currentIndex: number;
-  totalCount: number;
-};
-
-type PendingAttachment = {
-  id: string;
-  file: File;
-  kind: 'image' | 'file';
-  previewUrl: string | null;
-};
-
-type MessageNode = {
-  kind: 'message';
-  key: `message-${number}`;
-  item: TimelineItem;
-};
-
-type TimeDividerNode = {
-  kind: 'time-divider';
-  key: `time-divider-${number}`;
-  label: string;
-  timestamp: string;
-};
-
-type ChatRenderNode = MessageNode | TimeDividerNode;
-
-const TUS_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
-const TUS_RETRY_DELAYS_MS = [0, 1000, 3000, 5000];
-const TIME_DIVIDER_THRESHOLD_MS = 15 * 60 * 1000;
-const WEEKDAY_LABELS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'] as const;
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-function getPendingAttachmentKind(file: File) {
-  return file.type.startsWith('image/') ? 'image' : 'file';
-}
-
-function revokePendingAttachmentPreview(attachment: PendingAttachment) {
-  if (attachment.previewUrl) {
-    URL.revokeObjectURL(attachment.previewUrl);
-  }
-}
-
-function hasFilesInTransfer(dataTransfer: DataTransfer | null) {
-  if (!dataTransfer) return false;
-
-  if (dataTransfer.items.length > 0) {
-    return Array.from(dataTransfer.items).some((item) => item.kind === 'file');
-  }
-
-  return dataTransfer.files.length > 0;
-}
-
-function getUploadErrorMessage(error: unknown) {
-  if (error instanceof tus.DetailedError) {
-    const body = error.originalResponse?.getBody()?.trim();
-    if (body) return body;
-  }
-  if (error instanceof Error) return error.message;
-  return '上传失败';
-}
-
-function formatClockTime(date: Date) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
-}
-
-function isSameDay(left: Date, right: Date) {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function getWeekStart(date: Date) {
-  const weekStart = new Date(date);
-  const day = weekStart.getDay();
-  const diff = day === 0 ? 6 : day - 1;
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - diff);
-  return weekStart;
-}
-
-function isYesterday(date: Date, now: Date) {
-  const yesterday = new Date(now);
-  yesterday.setHours(0, 0, 0, 0);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return isSameDay(date, yesterday);
-}
-
-function isSameWeek(date: Date, now: Date) {
-  return getWeekStart(date).getTime() === getWeekStart(now).getTime();
-}
-
-function formatTimeDividerLabel(timestamp: string, now = new Date()) {
-  const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) {
-    return timestamp;
-  }
-
-  const time = formatClockTime(date);
-
-  if (isSameDay(date, now)) {
-    return time;
-  }
-
-  if (isYesterday(date, now)) {
-    return `昨天 ${time}`;
-  }
-
-  if (isSameWeek(date, now)) {
-    return `${WEEKDAY_LABELS[date.getDay()]} ${time}`;
-  }
-
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
-}
-
-function shouldInsertTimeDivider(previousTimestamp: string | null, currentTimestamp: string) {
-  if (!previousTimestamp) return true;
-
-  const previousDate = new Date(previousTimestamp);
-  const currentDate = new Date(currentTimestamp);
-
-  if (Number.isNaN(previousDate.getTime()) || Number.isNaN(currentDate.getTime())) {
-    return true;
-  }
-
-  if (!isSameDay(previousDate, currentDate)) {
-    return true;
-  }
-
-  return currentDate.getTime() - previousDate.getTime() >= TIME_DIVIDER_THRESHOLD_MS;
-}
-
-function buildChatRenderNodes(items: TimelineItem[], now = new Date()): ChatRenderNode[] {
-  const nodes: ChatRenderNode[] = [];
-  let previousTimestamp: string | null = null;
-
-  for (const item of items) {
-    if (shouldInsertTimeDivider(previousTimestamp, item.createdAt)) {
-      nodes.push({
-        kind: 'time-divider',
-        key: `time-divider-${item.id}`,
-        label: formatTimeDividerLabel(item.createdAt, now),
-        timestamp: item.createdAt,
-      });
-    }
-
-    nodes.push({
-      kind: 'message',
-      key: `message-${item.id}`,
-      item,
-    });
-    previousTimestamp = item.createdAt;
-  }
-
-  return nodes;
-}
-
-function TimeDivider({ label }: { label: string }) {
-  return (
-    <div className="mb-4 flex justify-center sm:mb-6">
-      <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-medium text-stone-500 sm:px-3.5 sm:text-xs">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function MessageBubble({ item, isOwn }: { item: TimelineItem; isOwn: boolean }) {
-  const hasText = !!item.textContent;
-  const isImage = item.type === 'image' && !!item.attachment;
-  const isFile = item.type === 'file' && !!item.attachment;
-  const isLink = item.type === 'link';
-
-  return (
-    <div className={`flex w-full mb-6 sm:mb-8 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-      {!isOwn && (
-        <div className="mr-3 mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-stone-100 border border-stone-200 text-xs font-semibold text-stone-600">
-          {item.device.name.slice(0, 2).toUpperCase()}
-        </div>
-      )}
-      <div className={`flex max-w-[85%] flex-col sm:max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}>
-        <span className={`mb-1.5 text-xs font-medium text-stone-500 ${isOwn ? 'mr-1' : 'ml-1'}`}>
-          {item.device.name}
-        </span>
-
-        <div
-          className={`group relative flex flex-col rounded-2xl ${
-            isOwn
-              ? 'bg-stone-100 text-stone-900 rounded-tr-sm'
-              : 'bg-white border border-stone-200 text-stone-900 shadow-sm rounded-tl-sm'
-          } ${isImage && !hasText ? 'p-1 bg-transparent border-0 shadow-none' : 'px-4 py-3 sm:px-5 sm:py-4'}`}
-        >
-          {isImage && (
-            <div className={`${hasText ? 'mb-3 mt-1' : ''} overflow-hidden rounded-xl border border-stone-200/50 bg-stone-50`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolveApiUrl(item.attachment!.url)}
-                alt={item.attachment!.originalName}
-                className="max-h-[400px] sm:max-h-[500px] w-auto max-w-full object-contain"
-                loading="lazy"
-              />
-            </div>
-          )}
-
-          {isFile && (
-            <a
-              href={resolveApiUrl(item.attachment!.url)}
-              target="_blank"
-              rel="noreferrer"
-              className={`flex items-center gap-3 rounded-xl p-3 mb-1 transition-colors ${
-                isOwn ? 'bg-white/60 hover:bg-white/80' : 'bg-stone-50 hover:bg-stone-100'
-              }`}
-            >
-              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${isOwn ? 'bg-white text-stone-700 shadow-sm' : 'bg-white shadow-sm border border-stone-200 text-stone-700'}`}>
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-              </div>
-              <div className="flex flex-col min-w-0 flex-1">
-                <span className="truncate text-sm font-medium">{item.attachment!.originalName}</span>
-                <span className={`text-[11px] mt-0.5 ${isOwn ? 'text-stone-500' : 'text-stone-500'}`}>点击下载此文件</span>
-              </div>
-            </a>
-          )}
-
-          {(item.type === 'text' || (isImage && hasText)) && (
-            <p className="whitespace-pre-wrap break-words text-[15px] sm:text-base leading-relaxed">
-              {item.textContent}
-            </p>
-          )}
-
-          {isLink && (
-            <a
-              href={item.textContent ?? '#'}
-              target="_blank"
-              rel="noreferrer"
-              className="break-all text-[15px] sm:text-base leading-relaxed underline underline-offset-4 decoration-stone-400 hover:decoration-stone-600"
-            >
-              {item.textContent}
-            </a>
-          )}
-        </div>
-
-        <div className={`mt-1.5 flex items-center gap-2 px-1 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-          <span className="text-[11px] font-medium text-stone-400">
-            {formatClockTime(new Date(item.createdAt))}
-          </span>
-        </div>
-
-      </div>
-      {isOwn && (
-        <div className="ml-3 mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-stone-900 text-white text-xs font-semibold shadow-sm">
-          {item.device.name.slice(0, 2).toUpperCase()}
-        </div>
-      )}
-    </div>
-  );
-}
+import { apiFetch, type TimelineItem } from '../lib/api';
+import { getUploadErrorMessage } from './chat/attachment-utils';
+import { ChatComposer } from './chat/chat-composer';
+import { MessageBubble } from './chat/message-bubble';
+import { buildChatRenderNodes } from './chat/time';
+import { TimeDivider } from './chat/time-divider';
+import type { SessionResponse, TimelineResponse, UploadState } from './chat/types';
+import { uploadFile } from './chat/upload';
+import { usePendingAttachments } from './chat/use-pending-attachments';
 
 export function ChatClient() {
   const router = useRouter();
@@ -305,20 +24,29 @@ export function ChatClient() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
-  const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState('');
-  
+
   const timelineRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingScrollOffsetRef = useRef<number | null>(null);
   const shouldScrollToBottomRef = useRef(false);
-  const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
-  const attachmentSequenceRef = useRef(0);
-  const dragDepthRef = useRef(0);
+  const {
+    pendingAttachments,
+    isDragActive,
+    imageInputRef,
+    fileInputRef,
+    removePendingAttachment,
+    clearPendingAttachments,
+    handleUploadInputChange,
+    handlePaste,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = usePendingAttachments({
+    onQueueChange: () => setError(''),
+  });
 
   useEffect(() => {
     async function initialize() {
@@ -362,16 +90,6 @@ export function ChatClient() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 192)}px`;
     }
   }, [text]);
-
-  useEffect(() => {
-    pendingAttachmentsRef.current = pendingAttachments;
-  }, [pendingAttachments]);
-
-  useEffect(() => {
-    return () => {
-      pendingAttachmentsRef.current.forEach(revokePendingAttachmentPreview);
-    };
-  }, []);
 
   async function refresh(afterOverride?: number | null) {
     setError('');
@@ -418,41 +136,6 @@ export function ChatClient() {
     }
   }
 
-  function appendPendingFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList).filter((file): file is File => file instanceof File);
-    if (files.length === 0) return;
-
-    const attachments: PendingAttachment[] = files.map((file) => ({
-      id: `pending-${attachmentSequenceRef.current += 1}`,
-      file,
-      kind: getPendingAttachmentKind(file),
-      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
-    }));
-
-    setPendingAttachments((current) => [
-      ...current,
-      ...attachments,
-    ]);
-  }
-
-  function removePendingAttachment(attachmentId: string) {
-    setPendingAttachments((current) => {
-      const attachment = current.find((item) => item.id === attachmentId);
-      if (attachment) {
-        revokePendingAttachmentPreview(attachment);
-      }
-
-      return current.filter((item) => item.id !== attachmentId);
-    });
-  }
-
-  function clearPendingAttachments() {
-    setPendingAttachments((current) => {
-      current.forEach(revokePendingAttachmentPreview);
-      return [];
-    });
-  }
-
   async function appendTimelineAfter(afterId: number | null) {
     const data = await apiFetch<TimelineResponse>(
       afterId === null ? '/timeline' : `/timeline?after=${afterId}`,
@@ -462,44 +145,6 @@ export function ChatClient() {
     setItems((current) => (afterId === null ? data.items : [...current, ...data.items]));
     setCursor(data.nextCursor);
     return data.nextCursor;
-  }
-
-  function uploadFile(file: File, currentIndex: number, totalCount: number) {
-    return new Promise<void>((resolve, reject) => {
-      const upload = new tus.Upload(file, {
-        endpoint: resolveApiUrl('/uploads'),
-        chunkSize: TUS_CHUNK_SIZE_BYTES,
-        retryDelays: TUS_RETRY_DELAYS_MS,
-        removeFingerprintOnSuccess: true,
-        metadata: {
-          filename: file.name,
-          filetype: file.type || 'application/octet-stream',
-        },
-        onBeforeRequest(request) {
-          const xhr = request.getUnderlyingObject();
-          if (xhr && 'withCredentials' in xhr) {
-            xhr.withCredentials = true;
-          }
-        },
-        onProgress(bytesSent, bytesTotal) {
-          setUploadState({ fileName: file.name, bytesSent, bytesTotal, currentIndex, totalCount });
-        },
-        onError(uploadError) {
-          reject(uploadError);
-        },
-        onSuccess() {
-          resolve();
-        },
-      });
-
-      void upload
-        .findPreviousUploads()
-        .then((previousUploads) => {
-          if (previousUploads.length > 0) upload.resumeFromPreviousUpload(previousUploads[0]);
-          upload.start();
-        })
-        .catch(reject);
-    });
   }
 
   async function submitMessage(value: string) {
@@ -547,7 +192,12 @@ export function ChatClient() {
           currentIndex: index + 1,
           totalCount: attachmentsToSend.length,
         });
-        await uploadFile(attachment.file, index + 1, attachmentsToSend.length);
+        await uploadFile({
+          file: attachment.file,
+          currentIndex: index + 1,
+          totalCount: attachmentsToSend.length,
+          onProgress: setUploadState,
+        });
         removePendingAttachment(attachment.id);
         uploadedAttachmentCount += 1;
       }
@@ -570,66 +220,6 @@ export function ChatClient() {
     } finally {
       setUploadState(null);
       setBusy(false);
-    }
-  }
-
-  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files ? Array.from(event.target.files) : [];
-    event.target.value = '';
-    if (files.length === 0) return;
-
-    setError('');
-    appendPendingFiles(files);
-  }
-
-  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.clipboardData.items)
-      .filter((item) => item.kind === 'file')
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => file instanceof File);
-
-    if (files.length === 0) return;
-
-    event.preventDefault();
-    setError('');
-    appendPendingFiles(files);
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
-    if (!hasFilesInTransfer(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setIsDragActive(true);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!hasFilesInTransfer(event.dataTransfer)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    if (!isDragActive) {
-      setIsDragActive(true);
-    }
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
-    if (!hasFilesInTransfer(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-
-    if (dragDepthRef.current === 0) {
-      setIsDragActive(false);
-    }
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    if (!hasFilesInTransfer(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setIsDragActive(false);
-    setError('');
-
-    if (event.dataTransfer.files.length > 0) {
-      appendPendingFiles(event.dataTransfer.files);
     }
   }
 
@@ -768,162 +358,29 @@ export function ChatClient() {
         </div>
       </section>
 
-      {/* Footer / Input Area */}
-      <footer
-        className="flex-shrink-0 border-t border-stone-100 bg-white/90 backdrop-blur-md p-3 sm:p-4 sm:pb-6 z-10"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
-      >
-        <div className="mx-auto flex flex-col w-full max-w-4xl">
-          <form
-            className={`relative rounded-3xl border transition-colors ${
-              isDragActive ? 'border-stone-400 bg-stone-50/80' : 'border-transparent'
-            }`}
-            onSubmit={handleSend}
-          >
-            <div
-              className="flex flex-col gap-3 rounded-3xl"
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-            >
-              {pendingAttachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 px-3 pt-3 sm:px-4 sm:pt-4">
-                  {pendingAttachments.map((attachment) => (
-                    <div
-                      key={attachment.id}
-                      className="flex max-w-full items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-left"
-                    >
-                      {attachment.kind === 'image' && attachment.previewUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={attachment.previewUrl}
-                          alt={attachment.file.name}
-                          className="h-12 w-12 rounded-xl border border-stone-200 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-600">
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                          </svg>
-                        </div>
-                      )}
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-stone-900">{attachment.file.name}</p>
-                        <p className="text-xs text-stone-500">
-                          {attachment.kind === 'image' ? '图片' : '文件'} · {formatBytes(attachment.file.size)}
-                        </p>
-                      </div>
-
-                      <button
-                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-white hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={busy}
-                        onClick={() => removePendingAttachment(attachment.id)}
-                        type="button"
-                        title="移除附件"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="relative flex items-end gap-2 px-1 pb-1 sm:gap-3 sm:px-2 sm:pb-2">
-            <div className="flex flex-shrink-0 gap-1 pb-1 sm:pb-1.5">
-              <input
-                ref={imageInputRef}
-                accept="image/*"
-                className="hidden"
-                disabled={busy}
-                multiple
-                onChange={(e) => void handleUpload(e)}
-                type="file"
-              />
-              <button
-                className="group rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
-                disabled={busy}
-                onClick={() => imageInputRef.current?.click()}
-                type="button"
-                title="上传图片"
-              >
-                <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 002 2z" />
-                </svg>
-              </button>
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                disabled={busy}
-                multiple
-                onChange={(e) => void handleUpload(e)}
-                type="file"
-              />
-              <button
-                className="group rounded-full p-2 sm:p-2.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
-                disabled={busy}
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-                title="上传文件"
-              >
-                <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="relative flex-1">
-              <textarea
-                ref={textareaRef}
-                className="block max-h-48 min-h-[44px] sm:min-h-[52px] w-full resize-none rounded-2xl border border-stone-200 bg-stone-50 py-3 sm:py-3.5 pl-4 pr-4 text-[15px] sm:text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:ring-0 focus:outline-none transition-colors"
-                disabled={busy}
-                onChange={(event) => setText(event.target.value)}
-                onPaste={handlePaste}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!busy && canSend) {
-                      void handleSend();
-                    }
-                  }
-                }}
-                placeholder={isDragActive ? '松开鼠标即可添加附件' : '发送消息...'}
-                rows={1}
-                value={text}
-              />
-            </div>
-
-            <button
-              className="flex h-11 w-11 sm:h-[52px] sm:w-[52px] flex-shrink-0 items-center justify-center rounded-full bg-stone-900 text-white transition-transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
-              disabled={busy || !canSend}
-              type="submit"
-              title="发送"
-            >
-              <svg className="h-5 w-5 sm:h-6 sm:w-6 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
-              </div>
-            </div>
-          </form>
-
-          {uploadState && (
-            <div className="mt-2 flex items-center justify-between px-3 text-xs sm:text-sm text-stone-500">
-              <div className="flex items-center gap-2 truncate pr-4">
-                <svg className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="truncate">正在上传 {uploadState.currentIndex}/{uploadState.totalCount}: {uploadState.fileName}</span>
-              </div>
-              <span className="flex-shrink-0 font-medium text-stone-700">{uploadPercent}%</span>
-            </div>
-          )}
-          {error && <p className="mt-2 px-3 text-xs sm:text-sm text-red-600">{error}</p>}
-        </div>
-      </footer>
+      <ChatComposer
+        text={text}
+        busy={busy}
+        canSend={canSend}
+        isDragActive={isDragActive}
+        pendingAttachments={pendingAttachments}
+        uploadState={uploadState}
+        uploadPercent={uploadPercent}
+        error={error}
+        textareaRef={textareaRef}
+        imageInputRef={imageInputRef}
+        fileInputRef={fileInputRef}
+        onTextChange={setText}
+        onSubmit={handleSend}
+        onPaste={handlePaste}
+        onImageInputChange={handleUploadInputChange}
+        onFileInputChange={handleUploadInputChange}
+        onRemoveAttachment={removePendingAttachment}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      />
     </main>
   );
 }
