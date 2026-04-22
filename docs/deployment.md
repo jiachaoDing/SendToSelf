@@ -1,49 +1,42 @@
 # Deployment
 
-本文档说明当前项目的 Docker Compose 部署方式。
+This project ships with a Docker Compose setup for self-hosting.
 
-## Runtime Layout
+## Default Stack
 
-部署后的实例包含 3 个服务：
+The default `docker-compose.yml` starts:
 
-- `web`
-  - 对外提供 `3000` 端口
-  - 承载内建 Web
-  - 统一把同源 `/api/*` 转发到 `server`
-- `server`
-  - 只在容器网络内监听 `4000`
-  - 启动前自动执行数据库迁移
-  - 使用本地磁盘目录保存附件
-- `postgres`
-  - 保存业务数据
-  - 在启动时生成或复用 `/config/runtime.env`
-  - 把数据库连接配置和 JWT 密钥写入 `runtime-config` 卷
+- `postgres` for application data
+- `server` for the API and uploads
+- `web` for the built-in web app
 
-## User Deployment
+The public entry point is `http://localhost:3000`.
 
-在仓库根目录执行：
+## Quick Start
+
+From the repository root:
 
 ```powershell
 docker compose pull
 docker compose up -d
 ```
 
-这套默认 Compose 面向普通用户，直接拉取并运行预构建镜像，不需要先复制 `.env.example`。
+Then:
 
-启动后：
+1. Open `http://localhost:3000`.
+2. Open `/setup` and set the instance password.
+3. Open `/auth/login` and sign in on the current device.
 
-- 浏览器访问 `http://localhost:3000`
-- 首次进入实例时先完成 `/setup`
-- 设置成功后进入 `/auth/login`
+## Ports
 
-如果需要修改宿主机访问端口，直接编辑根目录 `docker-compose.yml` 里 `web` 服务的 `ports`，把左侧宿主机端口改成你想要的值，例如：
+Only the web service is exposed by default:
 
 ```yaml
 ports:
-  - "8080:3000"
+  - "3000:3000"
 ```
 
-保存后重新执行：
+To use another host port, change the left side and restart:
 
 ```powershell
 docker compose up -d
@@ -51,21 +44,15 @@ docker compose up -d
 
 ## Optional Configuration
 
-默认情况下不需要准备 `.env`。
+You do not need a `.env` file for the default setup.
 
-首次启动时，`postgres` 容器会先检查 `runtime-config` 卷里的 `/config/runtime.env`：
-
-- 文件已存在时直接复用
-- 文件不存在且数据库卷为空时，自动生成高熵随机 `POSTGRES_PASSWORD` 和 `JWT_SECRET`
-- 文件不存在但数据库卷里已经有 PostgreSQL 数据时，启动会明确失败，要求先恢复 `runtime-config` 卷
-
-如需覆盖公开访问地址、实例名、数据库默认名、数据库默认用户，或固定镜像版本，再在仓库根目录创建 `.env`：
+If you want to override runtime values, copy `.env.example` to `.env` in the repository root:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-`.env.example` 提供这些可选覆盖项：
+Available overrides:
 
 ```env
 POSTGRES_DB=send_to_self
@@ -74,88 +61,32 @@ INSTANCE_NAME=Send to Self
 NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 ```
 
-说明：
+Use `IMAGE_TAG` in `.env` if you want to pin the image version.
 
-- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 容器启动时写入 `/runtime-config.js`
-- 浏览器只读取 `NEXT_PUBLIC_APP_ORIGIN`
-- `SERVER_INTERNAL_API_BASE_URL` 只供 `web` 容器内部把同源 `/api/*` 转发到 `server`
-- 默认镜像地址固定为 `ghcr.io/jiachaoding/sendtoself-*`
-- 如需固定镜像版本，可在根目录 `.env` 里额外设置 `IMAGE_TAG=v0.1.0`
-
-如果只修改 `.env` 里的 `NEXT_PUBLIC_APP_ORIGIN`，不需要重新 build 镜像，执行：
+If you only changed `NEXT_PUBLIC_APP_ORIGIN`, recreate the web container:
 
 ```powershell
 docker compose up -d --force-recreate web
 ```
 
-## Developer Deployment
+## Persistence
 
-开发者如需按当前仓库源码本地构建，执行：
+Compose creates three named volumes:
+
+- `runtime-config` for generated runtime secrets and database settings
+- `postgres-data` for PostgreSQL data
+- `server-uploads` for uploaded files
+
+Back up all three if you want a restorable instance.
+
+## Local Image Builds
+
+To build all services from the current repository instead of pulling published images:
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-`docker-compose.dev.yml` 会覆盖三个服务的镜像来源，使 `postgres`、`server`、`web` 都改为本地 `build:`。
-
-## Network Model
-
-- 宿主机只暴露 `3000`
-- `server:4000` 只供 `web` 和 `postgres` 所在容器网络使用
-- 浏览器统一访问 `web`，不直接请求服务端端口
-
-## Persistence
-
-Compose 会创建三个命名卷：
-
-- `runtime-config`
-  - 保存 `POSTGRES_DB`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `JWT_SECRET`
-- `postgres-data`
-  - 保存 PostgreSQL 数据
-- `server-uploads`
-  - 保存附件文件
-
-备份时需要同时备份 `runtime-config`、数据库卷和附件卷。
-
-## Upgrade
-
-普通用户更新镜像后，在仓库根目录执行：
-
-```powershell
-docker compose pull
-docker compose up -d
-```
-
-`server` 容器会在启动前自动执行迁移，然后再启动应用进程。
-
-如果只是修改公开访问地址，不需要 `--build`，只需要重建 `web` 容器即可。
-
-## Build Cache
-
-开发版 Compose 的本地源码构建做了几项优化：
-
-- `postgres`、`server` 所需的启动脚本会在构建阶段复制到镜像内
-- `web` 和 `server` 的 pnpm 依赖安装层使用相同的前置输入，便于复用同一组缓存层
-- `pnpm install` 使用 BuildKit cache mount 复用 pnpm store，减少重复下载
-
-这意味着：
-
-- 只改应用源码、没有改 `pnpm-lock.yaml` 或工作区 `package.json` 时，重复执行开发版 compose 构建通常会直接复用依赖层
-- 只有依赖清单变化时，依赖安装层才会重新执行
-
-## Common Commands
-
-- `docker compose pull`
-  - 拉取默认 Compose 里定义的三个预构建镜像，适合首次部署或准备升级时使用
-- `docker compose up -d`
-  - 使用已拉取的镜像启动或重启容器，适合普通用户日常部署，也适合在修改 `web` 的 `ports` 后重新应用配置
-- `docker compose up -d --force-recreate web`
-  - 按新的运行时环境重建 `web` 容器，适合只修改 `NEXT_PUBLIC_APP_ORIGIN`
-- `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
-  - 叠加开发版 compose，按当前仓库源码重新构建并启动三个服务
-
 ## Reverse Proxy
 
-如需通过域名或 HTTPS 暴露服务，建议把反向代理接到 `web:3000`。
-
-`web` 已负责把同源 `/api/*` 转发到内部 `server`，因此外部代理只需要处理 Web 入口。
+If you put the app behind a domain or HTTPS proxy, point the proxy to `web:3000`.

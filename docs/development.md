@@ -1,15 +1,9 @@
 # Development
 
-本文档面向本地开发和仓库贡献者。
+This repository is a pnpm workspace with two apps:
 
-## Repository Layout
-
-这是一个 monorepo：
-
-- `apps/server`
-  - NestJS + Drizzle + PostgreSQL + `@tus/server`
-- `apps/web`
-  - Next.js App Router + Tailwind CSS
+- `apps/web`: Next.js web client
+- `apps/server`: NestJS API server
 
 ## Requirements
 
@@ -25,12 +19,14 @@ corepack pnpm install
 
 ## Environment
 
-复制并修改：
+Copy the example files:
 
-- `apps/server/.env.example` -> `apps/server/.env`
-- `apps/web/.env.example` -> `apps/web/.env.local`
+```powershell
+Copy-Item apps/server/.env.example apps/server/.env
+Copy-Item apps/web/.env.example apps/web/.env.local
+```
 
-推荐最小配置如下。
+Default local values:
 
 `apps/server/.env`
 
@@ -50,16 +46,9 @@ NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 SERVER_INTERNAL_API_BASE_URL=http://localhost:4000
 ```
 
-说明：
-
-- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 启动前写入 `public/runtime-config.js`
-- `SERVER_INTERNAL_API_BASE_URL` 是 Next.js 到 NestJS 的内部地址
-- 浏览器统一请求同源 `/api/*`
-- `UPLOAD_DIR` 应指向可写目录
-
 ## Database
 
-先在本地创建 `send_to_self` 数据库，然后执行：
+Create a local `send_to_self` database, then run:
 
 ```powershell
 corepack pnpm db:generate
@@ -72,16 +61,19 @@ corepack pnpm db:migrate
 corepack pnpm dev
 ```
 
-默认地址：
+Default local URLs:
 
 - Web: `http://localhost:3000`
 - Server: `http://localhost:4000`
 
-首次访问 Web 时，先进入 `/setup` 设置主密码；设置成功后再通过 `/auth/login` 为当前设备登录。
+On a fresh database:
+
+1. Open `/setup` and set the instance password.
+2. Open `/auth/login` and sign in.
 
 ## Validation
 
-提交前建议至少执行：
+Use the smallest checks that cover your change:
 
 ```powershell
 corepack pnpm --filter web build
@@ -89,27 +81,19 @@ corepack pnpm --filter server build
 corepack pnpm --filter server test:e2e
 ```
 
-可手动验证的最小链路：
+Minimum manual check:
 
-- 全新数据库启动后，访问 `/` 会先跳到 `/setup`
-- `/setup` 成功后会跳到 `/auth/login`
-- 登录后首次进入聊天页，只看到最近一页消息
-- 点击聊天页顶部“加载更早消息”，继续拿到更旧的消息
-- 点击“手动刷新”，只追加最新消息，不重置已加载历史
-- 发送文本、链接后，消息仍正常出现在列表底部
-- 上传图片、文件时能看到基础进度，成功后 timeline 会刷新出新文件消息
+- setup redirects to login after the first password is created
+- login opens the timeline
+- sending text or links adds a new message
+- uploading an image or file creates a new attachment message
+- loading older messages and refreshing newer ones both work
 
-## PWA Notes
+## PWA Check
 
-PWA 相关能力建议在生产模式验证：
+Test install and offline shell behavior in production mode:
 
 ```powershell
 corepack pnpm --filter web build
 corepack pnpm --filter web start
 ```
-
-注意：
-
-- 不要使用 `next dev` 验证安装与离线行为
-- 首次必须在线访问一次，让浏览器完成 manifest 获取和 service worker 注册
-- 当前离线模式只保证应用壳可打开，不支持离线消息同步或离线发送

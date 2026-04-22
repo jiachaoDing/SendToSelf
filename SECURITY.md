@@ -1,21 +1,20 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting
 
-如果你发现了安全问题，请不要直接公开披露完整细节。
+Do not post vulnerability details in a public issue.
 
-建议优先使用非公开渠道联系维护者，或使用 GitHub 的私密漏洞报告能力（如果仓库已启用）。
+Use a private channel to contact the maintainer, or GitHub private vulnerability reporting if it is enabled for this repository.
 
-报告时请尽量包含：
+Include:
 
-- 问题描述
-- 影响范围
-- 复现步骤
-- 可能的利用条件
-- 你建议的修复方向（如果有）
+- affected area
+- impact
+- reproduction steps
+- any useful logs, proof, or mitigation ideas
 
-在维护者确认并完成修复前，请避免公开发布可直接利用的细节。
+Please avoid publishing exploit details until a fix is available.
 
 ## Supported Versions
 
-当前仓库仍处于早期阶段，默认只考虑最新主分支状态。
+Security fixes are handled against the latest state of the default branch.

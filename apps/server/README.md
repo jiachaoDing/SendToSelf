@@ -1,15 +1,15 @@
 # Server
 
-这是 Send to Self 的服务端应用。
+This is the NestJS API server for Send to Self.
 
-技术栈：
+## Stack
 
 - NestJS
 - Drizzle ORM
 - PostgreSQL
-- `@tus/server`
+- `@tus/server` for resumable uploads
 
-更完整的项目说明请查看：
+## Related Docs
 
 - [`../../README.md`](../../README.md)
 - [`../../docs/reference/api.md`](../../docs/reference/api.md)
