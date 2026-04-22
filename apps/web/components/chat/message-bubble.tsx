@@ -1,3 +1,6 @@
+ 'use client';
+
+import { useState } from 'react';
 import { resolveApiUrl, type TimelineItem } from '../../lib/api';
 import { formatClockTime } from './time';
 
@@ -7,13 +10,23 @@ type MessageBubbleProps = {
 };
 
 export function MessageBubble({ item, isOwn }: MessageBubbleProps) {
+  const [copied, setCopied] = useState(false);
   const hasText = !!item.textContent;
   const isImage = item.type === 'image' && !!item.attachment;
   const isFile = item.type === 'file' && !!item.attachment;
   const isLink = item.type === 'link';
+  const isPlainText = item.type === 'text' && hasText;
+
+  async function handleCopy() {
+    if (!item.textContent) return;
+
+    await navigator.clipboard.writeText(item.textContent);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
-    <div className={`mb-6 flex w-full sm:mb-8 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group/message mb-6 flex w-full sm:mb-8 ${isOwn ? 'justify-end' : 'justify-start'}`}>
       {!isOwn && (
         <div className="mr-3 mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-stone-200 bg-stone-100 text-xs font-semibold text-stone-600">
           {item.device.name.slice(0, 2).toUpperCase()}
@@ -94,6 +107,25 @@ export function MessageBubble({ item, isOwn }: MessageBubbleProps) {
         </div>
 
         <div className={`mt-1.5 flex items-center gap-2 px-1 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+          {isPlainText && (
+            <button
+              aria-label={copied ? 'Copied' : 'Copy message'}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:opacity-100 group-hover/message:opacity-100"
+              onClick={() => void handleCopy()}
+              title={copied ? 'Copied' : 'Copy'}
+              type="button"
+            >
+              {copied ? (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7V5a2 2 0 012-2h7a2 2 0 012 2v9a2 2 0 01-2 2h-2m-3 3H7a2 2 0 01-2-2V9a2 2 0 012-2h5a2 2 0 012 2v8a2 2 0 01-2 2z" />
+                </svg>
+              )}
+            </button>
+          )}
           <span className="text-[11px] font-medium text-stone-400">
             {formatClockTime(new Date(item.createdAt))}
           </span>
