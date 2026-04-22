@@ -52,6 +52,7 @@ SERVER_INTERNAL_API_BASE_URL=http://localhost:4000
 
 说明：
 
+- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 启动前写入 `public/runtime-config.js`
 - `SERVER_INTERNAL_API_BASE_URL` 是 Next.js 到 NestJS 的内部地址
 - 浏览器统一请求同源 `/api/*`
 - `UPLOAD_DIR` 应指向可写目录

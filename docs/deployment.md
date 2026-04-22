@@ -44,7 +44,9 @@ NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 
 说明：
 
-- `NEXT_PUBLIC_APP_ORIGIN` 应设置为用户实际访问 Web 的公开地址
+- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 容器启动时写入 `/runtime-config.js`
+- 浏览器只读取 `NEXT_PUBLIC_APP_ORIGIN`
+- `SERVER_INTERNAL_API_BASE_URL` 只供 `web` 容器内部把同源 `/api/*` 转发到 `server`
 - 如果只是在本机访问 `http://localhost:3000`，默认值可以直接使用
 
 ## Start
@@ -60,6 +62,12 @@ docker compose up -d --build
 - 浏览器访问 `http://localhost:3000`
 - 首次进入实例时先完成 `/setup`
 - 设置成功后进入 `/auth/login`
+
+如果之后只修改 `.env` 里的 `NEXT_PUBLIC_APP_ORIGIN`，不需要重新 build 镜像，执行：
+
+```powershell
+docker compose up -d --force-recreate web
+```
 
 ## Network Model
 
@@ -90,6 +98,8 @@ docker compose up -d --build
 
 `server` 容器会在启动前自动执行迁移，然后再启动应用进程。
 
+如果只是修改公开访问地址，不需要 `--build`，只需要重建 `web` 容器即可。
+
 ## Build Cache
 
 当前 Compose 仍然使用源码本地构建，但构建层做了两点优化：
@@ -106,6 +116,8 @@ docker compose up -d --build
 
 - `docker compose up -d`
   - 使用现有镜像启动或重启容器，适合镜像已经构建好、只想拉起当前环境
+- `docker compose up -d --force-recreate web`
+  - 按新的运行时环境重建 `web` 容器，适合只修改 `NEXT_PUBLIC_APP_ORIGIN`
 - `docker compose up -d --build`
   - 先按当前源码重新构建，再后台启动容器，适合改了 Dockerfile、依赖清单或应用源码之后使用
 - `docker compose build web`

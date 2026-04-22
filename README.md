@@ -30,6 +30,12 @@ docker compose up -d --build
 
 如果需要修改实例名、数据库名、数据库用户或公开访问地址，再从 `.env.example` 复制出 `.env` 覆盖默认值。
 
+`NEXT_PUBLIC_APP_ORIGIN` 现在在 `web` 容器启动时生效。只修改公开访问地址时，不需要重新 build 镜像，执行：
+
+```powershell
+docker compose up -d --force-recreate web
+```
+
 部署细节见 [`docs/deployment.md`](docs/deployment.md)，本地开发见 [`docs/development.md`](docs/development.md)。
 
 Docker 本地源码构建已针对 pnpm monorepo 做缓存优化：

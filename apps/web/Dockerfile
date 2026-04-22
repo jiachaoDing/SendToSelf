@@ -18,11 +18,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 COPY . .
 
-ARG NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
-ARG SERVER_INTERNAL_API_BASE_URL=http://server:4000
-
-ENV NEXT_PUBLIC_APP_ORIGIN=${NEXT_PUBLIC_APP_ORIGIN}
-ENV SERVER_INTERNAL_API_BASE_URL=${SERVER_INTERNAL_API_BASE_URL}
+ENV SERVER_INTERNAL_API_BASE_URL=http://server:4000
 
 RUN pnpm --filter web build
 

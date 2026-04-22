@@ -6,11 +6,9 @@ const serverInternalApiBaseUrl = (
 
 const allowedDevOrigins = Array.from(
   new Set(
-    [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      process.env.NEXT_PUBLIC_APP_ORIGIN,
-    ].filter((value): value is string => Boolean(value)),
+    ['http://localhost:3000', 'http://127.0.0.1:3000'].filter(
+      (value): value is string => Boolean(value),
+    ),
   ),
 );
 
@@ -21,6 +19,15 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/runtime-config.js',
         headers: [
           {
             key: 'Cache-Control',
