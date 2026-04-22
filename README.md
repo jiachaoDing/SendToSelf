@@ -29,32 +29,17 @@ docker compose up -d
 
 启动后首次访问 Web 时，先打开 `/setup` 设置主密码，再进入 `/auth/login` 为当前设备登录。
 
-如果需要修改实例名、数据库名、数据库用户、公开访问地址，或固定镜像版本，再从 `.env.example` 复制出 `.env` 覆盖默认值。
+如果需要修改宿主机访问端口，直接编辑根目录 `docker-compose.yml` 里 `web` 服务的 `ports`，把左侧宿主机端口改成你想要的值，例如 `"8080:3000"`。
 
-普通用户版 Compose 直接使用预构建镜像，容器启动时只依赖镜像内容和命名卷。
-
-默认镜像地址固定为 `ghcr.io/jiachaoding/sendtoself-*:${IMAGE_TAG:-latest}`。如果需要固定版本，可以在根目录 `.env` 里额外写入 `IMAGE_TAG=v0.1.0` 之类的值。
-
-
-`NEXT_PUBLIC_APP_ORIGIN` 现在在 `web` 容器启动时生效。只修改公开访问地址时，不需要重新 build 镜像，执行：
+保存后重新执行：
 
 ```powershell
-docker compose up -d --force-recreate web
+docker compose up -d
 ```
+
+如需固定镜像版本或覆盖公开访问地址等高级配置，再参考 `.env.example` 和 [`docs/deployment.md`](docs/deployment.md)。
 
 部署细节见 [`docs/deployment.md`](docs/deployment.md)，本地开发见 [`docs/development.md`](docs/development.md)。
-
-开发者如需按本地源码构建 Docker 环境，使用：
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
-
-开发版叠加后，本地源码构建仍针对 pnpm monorepo 做缓存优化：
-
-- `pnpm install` 只会在 `pnpm-lock.yaml` 或相关 `package.json` 变化后重建依赖层
-- 重复执行 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` 时，会复用 Docker BuildKit 和 pnpm store 缓存
-- 只改应用源码但不改依赖时，建议继续使用开发版 compose 重新构建当前代码
 
 ## Screenshots
 

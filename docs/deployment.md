@@ -21,40 +21,6 @@
 - `postgres`
   - 保存业务数据
 
-## Environment
-
-默认情况下不需要准备 `.env`。
-
-首次启动时，Compose 会额外运行一个一次性 `config` 容器：
-
-- 自动生成高熵随机 `POSTGRES_PASSWORD`
-- 自动生成高熵随机 `JWT_SECRET`
-- 把运行期配置写入持久化卷，供 `postgres` 和 `server` 复用
-
-可覆盖的常用项如下：
-
-```env
-POSTGRES_DB=send_to_self
-POSTGRES_USER=postgres
-INSTANCE_NAME=Send to Self
-NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
-```
-
-如需覆盖这些默认值，或固定镜像版本，再在仓库根目录创建 `.env`：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-说明：
-
-- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 容器启动时写入 `/runtime-config.js`
-- 浏览器只读取 `NEXT_PUBLIC_APP_ORIGIN`
-- `SERVER_INTERNAL_API_BASE_URL` 只供 `web` 容器内部把同源 `/api/*` 转发到 `server`
-- 如果只是在本机访问 `http://localhost:3000`，默认值可以直接使用
-- 默认镜像地址固定为 `ghcr.io/jiachaoding/sendtoself-*`
-- 如需固定镜像版本，可在根目录 `.env` 里额外设置 `IMAGE_TAG=v0.1.0`
-
 ## User Deployment
 
 在仓库根目录执行：
@@ -64,7 +30,7 @@ docker compose pull
 docker compose up -d
 ```
 
-这套默认 Compose 面向普通用户，直接拉取并运行预构建镜像。
+这套默认 Compose 面向普通用户，直接拉取并运行预构建镜像，不需要先复制 `.env.example`。
 
 启动后：
 
@@ -72,7 +38,53 @@ docker compose up -d
 - 首次进入实例时先完成 `/setup`
 - 设置成功后进入 `/auth/login`
 
-如果之后只修改 `.env` 里的 `NEXT_PUBLIC_APP_ORIGIN`，不需要重新 build 镜像，执行：
+如果需要修改宿主机访问端口，直接编辑根目录 `docker-compose.yml` 里 `web` 服务的 `ports`，把左侧宿主机端口改成你想要的值，例如：
+
+```yaml
+ports:
+  - "8080:3000"
+```
+
+保存后重新执行：
+
+```powershell
+docker compose up -d
+```
+
+## Optional Configuration
+
+默认情况下不需要准备 `.env`。
+
+首次启动时，Compose 会额外运行一个一次性 `config` 容器：
+
+- 自动生成高熵随机 `POSTGRES_PASSWORD`
+- 自动生成高熵随机 `JWT_SECRET`
+- 把运行期配置写入持久化卷，供 `postgres` 和 `server` 复用
+
+如需覆盖公开访问地址、实例名、数据库默认名、数据库默认用户，或固定镜像版本，再在仓库根目录创建 `.env`：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env.example` 提供这些可选覆盖项：
+
+```env
+POSTGRES_DB=send_to_self
+POSTGRES_USER=postgres
+INSTANCE_NAME=Send to Self
+NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
+```
+
+说明：
+
+- `NEXT_PUBLIC_APP_ORIGIN` 会在 `web` 容器启动时写入 `/runtime-config.js`
+- 浏览器只读取 `NEXT_PUBLIC_APP_ORIGIN`
+- `SERVER_INTERNAL_API_BASE_URL` 只供 `web` 容器内部把同源 `/api/*` 转发到 `server`
+- 默认镜像地址固定为 `ghcr.io/jiachaoding/sendtoself-*`
+- 如需固定镜像版本，可在根目录 `.env` 里额外设置 `IMAGE_TAG=v0.1.0`
+
+如果只修改 `.env` 里的 `NEXT_PUBLIC_APP_ORIGIN`，不需要重新 build 镜像，执行：
 
 ```powershell
 docker compose up -d --force-recreate web
@@ -138,7 +150,7 @@ docker compose up -d
 - `docker compose pull`
   - 拉取默认 Compose 里定义的四个预构建镜像，适合首次部署或准备升级时使用
 - `docker compose up -d`
-  - 使用已拉取的镜像启动或重启容器，适合普通用户日常部署
+  - 使用已拉取的镜像启动或重启容器，适合普通用户日常部署，也适合在修改 `web` 的 `ports` 后重新应用配置
 - `docker compose up -d --force-recreate web`
   - 按新的运行时环境重建 `web` 容器，适合只修改 `NEXT_PUBLIC_APP_ORIGIN`
 - `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
