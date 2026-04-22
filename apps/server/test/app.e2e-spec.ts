@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { AttachmentsController } from '../src/attachments/attachments.controller';
@@ -26,17 +28,13 @@ describe('Auth transport smoke', () => {
   let authVersion: number;
   let initialized: boolean;
   let remoteClientEnabled: boolean;
+  let attachmentFixtureDir: string;
 
   const device = {
     id: 1,
     name: 'Test Device',
   };
-  const attachmentPath = join(
-    __dirname,
-    '..',
-    'uploads',
-    '17cce681acbb61db1276fca9298d31bc',
-  );
+  let attachmentPath: string;
   const timelineItems = Array.from({ length: 60 }, (_, index) => ({
     id: index + 1,
     type: 'text' as const,
@@ -231,6 +229,10 @@ describe('Auth transport smoke', () => {
   };
 
   beforeAll(async () => {
+    attachmentFixtureDir = mkdtempSync(join(tmpdir(), 'send-to-self-e2e-'));
+    attachmentPath = join(attachmentFixtureDir, 'fixture.png');
+    writeFileSync(attachmentPath, Buffer.from('fixture-image'));
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [
         AuthController,
@@ -288,6 +290,7 @@ describe('Auth transport smoke', () => {
 
   afterAll(async () => {
     await app.close();
+    rmSync(attachmentFixtureDir, { recursive: true, force: true });
   });
 
   it('keeps the web cookie auth flow working', async () => {
