@@ -70,7 +70,7 @@ export function MessageBubble({ item, isOwn }: MessageBubbleProps) {
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-medium">{item.attachment!.originalName}</span>
-                <span className="mt-0.5 text-[11px] text-stone-500">点击下载此文件</span>
+                <span className="mt-0.5 text-[11px] text-stone-500">Click to download</span>
               </div>
             </a>
           )}

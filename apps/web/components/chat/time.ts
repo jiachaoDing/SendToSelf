@@ -16,10 +16,10 @@ type TimeDividerNode = {
 export type ChatRenderNode = MessageNode | TimeDividerNode;
 
 const TIME_DIVIDER_THRESHOLD_MS = 15 * 60 * 1000;
-const WEEKDAY_LABELS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'] as const;
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 export function formatClockTime(date: Date) {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat('en', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -68,14 +68,14 @@ function formatTimeDividerLabel(timestamp: string, now = new Date()) {
   }
 
   if (isYesterday(date, now)) {
-    return `昨天 ${time}`;
+    return `Yesterday ${time}`;
   }
 
   if (isSameWeek(date, now)) {
     return `${WEEKDAY_LABELS[date.getDay()]} ${time}`;
   }
 
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${time}`;
 }
 
 function shouldInsertTimeDivider(previousTimestamp: string | null, currentTimestamp: string) {

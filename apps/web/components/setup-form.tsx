@@ -42,21 +42,21 @@ export function SetupForm() {
       });
       router.replace(bootstrap.auth.loginPath);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '初始化失败');
+      setError(submitError instanceof Error ? submitError.message : 'Setup failed');
     } finally {
       setBusy(false);
     }
   }
 
   if (checkingBootstrap) {
-    return <p className="text-sm text-stone-500">正在检查初始化状态...</p>;
+    return <p className="text-sm text-stone-500">Checking setup status...</p>;
   }
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label className="block text-sm text-stone-600" htmlFor="password">
-          主密码
+          Primary password
         </label>
         <input
           className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-500"
@@ -76,7 +76,7 @@ export function SetupForm() {
         disabled={busy || !password.trim()}
         type="submit"
       >
-        保存主密码
+        Set password
       </button>
     </form>
   );

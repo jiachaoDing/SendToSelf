@@ -116,7 +116,7 @@ export function ChatComposer({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-stone-900">{attachment.file.name}</p>
                       <p className="text-xs text-stone-500">
-                        {attachment.kind === 'image' ? '图片' : '文件'} · {formatBytes(attachment.file.size)}
+                        {attachment.kind === 'image' ? 'Image' : 'File'} · {formatBytes(attachment.file.size)}
                       </p>
                     </div>
 
@@ -125,7 +125,7 @@ export function ChatComposer({
                       disabled={busy}
                       onClick={() => onRemoveAttachment(attachment.id)}
                       type="button"
-                      title="移除附件"
+                      title="Remove attachment"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -152,7 +152,7 @@ export function ChatComposer({
                   disabled={busy}
                   onClick={() => imageInputRef.current?.click()}
                   type="button"
-                  title="上传图片"
+                  title="Upload image"
                 >
                   <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -176,7 +176,7 @@ export function ChatComposer({
                   disabled={busy}
                   onClick={() => fileInputRef.current?.click()}
                   type="button"
-                  title="上传文件"
+                  title="Upload file"
                 >
                   <svg className="h-6 w-6 sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -197,7 +197,7 @@ export function ChatComposer({
                   onChange={(event) => onTextChange(event.target.value)}
                   onKeyDown={handleKeyDown}
                   onPaste={onPaste}
-                  placeholder={isDragActive ? '松开鼠标即可添加附件' : '发送消息...'}
+                  placeholder={isDragActive ? 'Drop files to attach' : 'Send a message...'}
                   rows={1}
                   value={text}
                 />
@@ -207,7 +207,7 @@ export function ChatComposer({
                 className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-stone-900 text-white transition-transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50 sm:h-[52px] sm:w-[52px]"
                 disabled={busy || !canSend}
                 type="submit"
-                title="发送"
+                title="Send"
               >
                 <svg className="ml-0.5 h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -229,7 +229,7 @@ export function ChatComposer({
                 />
               </svg>
               <span className="truncate">
-                正在上传 {uploadState.currentIndex}/{uploadState.totalCount}: {uploadState.fileName}
+                Uploading {uploadState.currentIndex}/{uploadState.totalCount}: {uploadState.fileName}
               </span>
             </div>
             <span className="flex-shrink-0 font-medium text-stone-700">{uploadPercent}%</span>

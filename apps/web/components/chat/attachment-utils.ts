@@ -34,5 +34,5 @@ export function getUploadErrorMessage(error: unknown) {
     if (body) return body;
   }
   if (error instanceof Error) return error.message;
-  return '上传失败';
+  return 'Upload failed';
 }

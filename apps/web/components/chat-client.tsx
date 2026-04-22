@@ -117,7 +117,7 @@ export function ChatClient() {
         shouldScrollToBottomRef.current = true;
       }
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : '刷新失败');
+      setError(refreshError instanceof Error ? refreshError.message : 'Refresh failed');
     } finally {
       setRefreshing(false);
     }
@@ -140,7 +140,7 @@ export function ChatClient() {
       setHasMoreHistory(data.hasMore);
     } catch (loadOlderError) {
       pendingScrollOffsetRef.current = null;
-      setError(loadOlderError instanceof Error ? loadOlderError.message : '加载更早消息失败');
+      setError(loadOlderError instanceof Error ? loadOlderError.message : 'Failed to load older messages');
     } finally {
       setLoadingOlder(false);
     }
@@ -262,7 +262,7 @@ export function ChatClient() {
           <svg className="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <span className="text-sm font-medium">正在连接...</span>
+          <span className="text-sm font-medium">Connecting...</span>
         </div>
       </main>
     );
@@ -289,7 +289,7 @@ export function ChatClient() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <p className="text-[11px] sm:text-xs font-medium text-stone-500">当前设备：{deviceName}</p>
+                <p className="text-[11px] sm:text-xs font-medium text-stone-500">This device: {deviceName}</p>
               </div>
             </div>
           </div>
@@ -300,7 +300,7 @@ export function ChatClient() {
               disabled={busy || refreshing || loadingOlder}
               onClick={() => void refresh()}
               type="button"
-              title="刷新"
+              title="Refresh"
             >
               <svg className={`h-5 w-5 sm:h-5 sm:w-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -311,7 +311,7 @@ export function ChatClient() {
               disabled={busy}
               onClick={() => void handleLogout()}
               type="button"
-              title="退出"
+              title="Log out"
             >
               <svg className="h-5 w-5 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -335,12 +335,12 @@ export function ChatClient() {
                 onClick={() => void loadOlder()}
                 type="button"
               >
-                {loadingOlder ? '加载中...' : '加载更多历史'}
+                {loadingOlder ? 'Loading...' : 'Load older messages'}
               </button>
             </div>
           ) : items.length > 0 ? (
             <div className="mb-6 sm:mb-8 flex justify-center">
-               <span className="text-[11px] sm:text-xs text-stone-400">没有更多历史消息了</span>
+               <span className="text-[11px] sm:text-xs text-stone-400">No older messages</span>
             </div>
           ) : null}
 
@@ -352,8 +352,8 @@ export function ChatClient() {
                 </svg>
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm sm:text-base font-medium text-stone-900">暂无内容</h3>
-                <p className="text-xs sm:text-sm text-stone-500">发送第一条消息给自己吧</p>
+                <h3 className="text-sm sm:text-base font-medium text-stone-900">No messages yet</h3>
+                <p className="text-xs sm:text-sm text-stone-500">Send your first message to yourself</p>
               </div>
             </div>
           ) : null}

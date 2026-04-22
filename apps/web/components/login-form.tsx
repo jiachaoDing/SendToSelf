@@ -44,28 +44,28 @@ export function LoginForm() {
 
       router.replace('/');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '登录失败');
+      setError(submitError instanceof Error ? submitError.message : 'Failed to log in');
     } finally {
       setBusy(false);
     }
   }
 
   if (checkingBootstrap) {
-    return <p className="text-sm text-stone-500">正在检查初始化状态...</p>;
+    return <p className="text-sm text-stone-500">Checking setup status...</p>;
   }
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label className="block text-sm text-stone-600" htmlFor="device-name">
-          设备标识
+          Device name
         </label>
         <input
           className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-500"
           disabled={busy}
           id="device-name"
           onChange={(event) => setDeviceName(event.target.value)}
-          placeholder="例如：Office Laptop"
+          placeholder="Office Laptop"
           required
           value={deviceName}
         />
@@ -73,7 +73,7 @@ export function LoginForm() {
 
       <div className="space-y-2">
         <label className="block text-sm text-stone-600" htmlFor="password">
-          密码
+          Password
         </label>
         <input
           className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-500"
@@ -93,7 +93,7 @@ export function LoginForm() {
         disabled={busy || !password.trim() || !deviceName.trim()}
         type="submit"
       >
-        登录
+        Log in
       </button>
     </form>
   );
