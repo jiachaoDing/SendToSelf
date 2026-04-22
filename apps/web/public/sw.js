@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'send-to-self-static-v1';
-const OFFLINE_CACHE = 'send-to-self-offline-v1';
+const STATIC_CACHE = 'send-to-self-static-v2';
+const OFFLINE_CACHE = 'send-to-self-offline-v2';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -74,20 +74,25 @@ async function handleNavigationRequest(request) {
 }
 
 async function handleStaticAssetRequest(request) {
-  const cachedResponse = await caches.match(request);
-  if (cachedResponse) {
-    return cachedResponse;
-  }
-
-  const response = await fetch(request);
-
-  if (!response || response.status !== 200 || response.type === 'opaque') {
-    return response;
-  }
-
   const cache = await caches.open(STATIC_CACHE);
-  cache.put(request, response.clone());
-  return response;
+
+  try {
+    const response = await fetch(request);
+
+    if (!response || response.status !== 200 || response.type === 'opaque') {
+      return response;
+    }
+
+    cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    throw error;
+  }
 }
 
 function shouldCacheStaticAsset(request, url) {

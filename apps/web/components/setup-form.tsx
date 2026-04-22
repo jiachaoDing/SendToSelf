@@ -49,7 +49,7 @@ export function SetupForm() {
   }
 
   if (checkingBootstrap) {
-    return <p className="text-sm text-stone-500">Checking setup status...</p>;
+    return <p className="text-sm text-stone-500" suppressHydrationWarning>Checking setup status...</p>;
   }
 
   return (

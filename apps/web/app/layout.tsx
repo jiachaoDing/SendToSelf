@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import './globals.css';
 import { PwaRegistration } from '../components/pwa-registration';
 
@@ -44,7 +43,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Script src="/runtime-config.js" strategy="beforeInteractive" />
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/runtime-config.js" />
         <PwaRegistration />
         {children}
       </body>
