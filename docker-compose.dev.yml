@@ -1,0 +1,20 @@
+services:
+  config:
+    build:
+      context: .
+      dockerfile: docker/config.Dockerfile
+
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile

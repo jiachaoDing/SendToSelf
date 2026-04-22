@@ -1,8 +1,6 @@
 services:
   config:
-    build:
-      context: .
-      dockerfile: docker/config.Dockerfile
+    image: ghcr.io/jiachaoding/sendtoself-config:${IMAGE_TAG:-latest}
     restart: "no"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-send_to_self}
@@ -12,9 +10,7 @@ services:
       - runtime-config:/config
 
   postgres:
-    build:
-      context: .
-      dockerfile: docker/postgres.Dockerfile
+    image: ghcr.io/jiachaoding/sendtoself-postgres:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       config:
@@ -34,9 +30,7 @@ services:
       retries: 5
 
   server:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
+    image: ghcr.io/jiachaoding/sendtoself-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       config:
@@ -56,9 +50,7 @@ services:
       - runtime-config:/config:ro
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
+    image: ghcr.io/jiachaoding/sendtoself-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       - server
