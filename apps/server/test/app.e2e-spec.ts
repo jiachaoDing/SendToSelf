@@ -32,7 +32,9 @@ describe('Auth transport smoke', () => {
     name: 'Test Device',
   };
   const attachmentPath = join(
-    'D:\\CursorProject\\SendToSelf\\apps\\server\\uploads',
+    __dirname,
+    '..',
+    'uploads',
     '17cce681acbb61db1276fca9298d31bc',
   );
   const timelineItems = Array.from({ length: 60 }, (_, index) => ({
