@@ -57,6 +57,8 @@ NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 docker compose up -d --build
 ```
 
+这一步会构建 `config`、`postgres`、`server`、`web` 四个镜像；运行期脚本会随对应镜像进入容器。
+
 启动后：
 
 - 浏览器访问 `http://localhost:3000`
@@ -104,6 +106,7 @@ docker compose up -d --build
 
 当前 Compose 仍然使用源码本地构建，但构建层做了两点优化：
 
+- `config`、`postgres`、`server` 所需的启动脚本会在构建阶段复制到镜像内
 - `web` 和 `server` 的 pnpm 依赖安装层使用相同的前置输入，便于复用同一组缓存层
 - `pnpm install` 使用 BuildKit cache mount 复用 pnpm store，减少重复下载
 

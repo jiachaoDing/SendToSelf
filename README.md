@@ -30,6 +30,8 @@ docker compose up -d --build
 
 如果需要修改实例名、数据库名、数据库用户或公开访问地址，再从 `.env.example` 复制出 `.env` 覆盖默认值。
 
+Compose 构建时会把运行期脚本一并打进对应镜像，容器启动时只依赖镜像内容和命名卷。
+
 `NEXT_PUBLIC_APP_ORIGIN` 现在在 `web` 容器启动时生效。只修改公开访问地址时，不需要重新 build 镜像，执行：
 
 ```powershell

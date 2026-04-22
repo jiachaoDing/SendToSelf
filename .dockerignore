@@ -6,6 +6,9 @@ SECURITY.md
 LICENSE
 docs
 scripts
+!scripts/
+!scripts/docker/
+!scripts/docker/*.sh
 node_modules
 .next
 dist

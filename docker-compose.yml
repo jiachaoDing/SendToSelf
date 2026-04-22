@@ -1,6 +1,8 @@
 services:
   config:
-    image: alpine:3.21
+    build:
+      context: .
+      dockerfile: docker/config.Dockerfile
     restart: "no"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-send_to_self}
@@ -8,10 +10,11 @@ services:
     command: ["/bin/sh", "/scripts/init-config.sh"]
     volumes:
       - runtime-config:/config
-      - ./scripts/docker:/scripts:ro
 
   postgres:
-    image: postgres:17-bookworm
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
     restart: unless-stopped
     depends_on:
       config:
@@ -20,7 +23,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - runtime-config:/config:ro
-      - ./scripts/docker:/scripts:ro
     healthcheck:
       test:
         [
@@ -52,7 +54,6 @@ services:
     volumes:
       - server-uploads:/data/uploads
       - runtime-config:/config:ro
-      - ./scripts/docker:/scripts:ro
 
   web:
     build:

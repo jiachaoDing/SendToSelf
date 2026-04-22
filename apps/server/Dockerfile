@@ -18,6 +18,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 COPY . .
 
+COPY scripts/docker/server-entrypoint.sh /scripts/server-entrypoint.sh
+
+RUN chmod 755 /scripts/server-entrypoint.sh
+
 RUN pnpm --filter server build
 
 CMD ["sh", "-c", "corepack pnpm db:migrate && corepack pnpm --filter server start:prod"]
