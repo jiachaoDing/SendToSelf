@@ -21,8 +21,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_name: sendtoself-config
-            dockerfile: docker/config.Dockerfile
           - image_name: sendtoself-postgres
             dockerfile: docker/postgres.Dockerfile
           - image_name: sendtoself-server

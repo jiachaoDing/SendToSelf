@@ -4,11 +4,7 @@
 
 ## Runtime Layout
 
-部署后的实例包含 4 个服务：
-
-- `config`
-  - 一次性初始化运行期配置
-  - 把生成的密钥和数据库密码写入 `runtime-config` 卷
+部署后的实例包含 3 个服务：
 
 - `web`
   - 对外提供 `3000` 端口
@@ -20,6 +16,8 @@
   - 使用本地磁盘目录保存附件
 - `postgres`
   - 保存业务数据
+  - 在启动时生成或复用 `/config/runtime.env`
+  - 把数据库连接配置和 JWT 密钥写入 `runtime-config` 卷
 
 ## User Deployment
 
@@ -55,11 +53,11 @@ docker compose up -d
 
 默认情况下不需要准备 `.env`。
 
-首次启动时，Compose 会额外运行一个一次性 `config` 容器：
+首次启动时，`postgres` 容器会先检查 `runtime-config` 卷里的 `/config/runtime.env`：
 
-- 自动生成高熵随机 `POSTGRES_PASSWORD`
-- 自动生成高熵随机 `JWT_SECRET`
-- 把运行期配置写入持久化卷，供 `postgres` 和 `server` 复用
+- 文件已存在时直接复用
+- 文件不存在且数据库卷为空时，自动生成高熵随机 `POSTGRES_PASSWORD` 和 `JWT_SECRET`
+- 文件不存在但数据库卷里已经有 PostgreSQL 数据时，启动会明确失败，要求先恢复 `runtime-config` 卷
 
 如需覆盖公开访问地址、实例名、数据库默认名、数据库默认用户，或固定镜像版本，再在仓库根目录创建 `.env`：
 
@@ -98,7 +96,7 @@ docker compose up -d --force-recreate web
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-`docker-compose.dev.yml` 会覆盖四个服务的镜像来源，使 `config`、`postgres`、`server`、`web` 都改为本地 `build:`。
+`docker-compose.dev.yml` 会覆盖三个服务的镜像来源，使 `postgres`、`server`、`web` 都改为本地 `build:`。
 
 ## Network Model
 
@@ -111,7 +109,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 Compose 会创建三个命名卷：
 
 - `runtime-config`
-  - 保存自动生成的数据库密码和 JWT 密钥
+  - 保存 `POSTGRES_DB`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `JWT_SECRET`
 - `postgres-data`
   - 保存 PostgreSQL 数据
 - `server-uploads`
@@ -134,9 +132,9 @@ docker compose up -d
 
 ## Build Cache
 
-开发版 Compose 的本地源码构建做了两点优化：
+开发版 Compose 的本地源码构建做了几项优化：
 
-- `config`、`postgres`、`server` 所需的启动脚本会在构建阶段复制到镜像内
+- `postgres`、`server` 所需的启动脚本会在构建阶段复制到镜像内
 - `web` 和 `server` 的 pnpm 依赖安装层使用相同的前置输入，便于复用同一组缓存层
 - `pnpm install` 使用 BuildKit cache mount 复用 pnpm store，减少重复下载
 
@@ -148,13 +146,13 @@ docker compose up -d
 ## Common Commands
 
 - `docker compose pull`
-  - 拉取默认 Compose 里定义的四个预构建镜像，适合首次部署或准备升级时使用
+  - 拉取默认 Compose 里定义的三个预构建镜像，适合首次部署或准备升级时使用
 - `docker compose up -d`
   - 使用已拉取的镜像启动或重启容器，适合普通用户日常部署，也适合在修改 `web` 的 `ports` 后重新应用配置
 - `docker compose up -d --force-recreate web`
   - 按新的运行时环境重建 `web` 容器，适合只修改 `NEXT_PUBLIC_APP_ORIGIN`
 - `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
-  - 叠加开发版 compose，按当前仓库源码重新构建并启动四个服务
+  - 叠加开发版 compose，按当前仓库源码重新构建并启动三个服务
 
 ## Reverse Proxy
 

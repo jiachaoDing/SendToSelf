@@ -37,6 +37,7 @@
   - 基础离线应用壳
 - 部署已提供：
   - Docker Compose
+  - 运行期配置持久化卷
   - PostgreSQL 数据卷
   - 附件持久化卷
 
@@ -45,6 +46,7 @@
 - 本地开发使用 `corepack pnpm dev` 同时启动 Web 和 Server
 - 面向普通用户的 Docker Compose 使用预构建镜像：`docker compose pull` + `docker compose up -d`
 - 面向开发者的 Docker Compose 使用叠加文件本地构建：`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
+- 默认 Compose 启动 `postgres`、`server`、`web` 三个服务
 - 当前对外入口固定是 Web
 - 默认端口：
   - Web: `3000`

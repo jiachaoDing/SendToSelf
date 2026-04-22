@@ -29,6 +29,8 @@ docker compose up -d
 
 启动后首次访问 Web 时，先打开 `/setup` 设置主密码，再进入 `/auth/login` 为当前设备登录。
 
+默认 Compose 会启动 `postgres`、`server`、`web` 三个服务，并创建 `runtime-config`、`postgres-data`、`server-uploads` 三个命名卷。
+
 如果需要修改宿主机访问端口，直接编辑根目录 `docker-compose.yml` 里 `web` 服务的 `ports`，把左侧宿主机端口改成你想要的值，例如 `"8080:3000"`。
 
 保存后重新执行：

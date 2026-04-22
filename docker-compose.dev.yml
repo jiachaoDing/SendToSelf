@@ -1,9 +1,4 @@
 services:
-  config:
-    build:
-      context: .
-      dockerfile: docker/config.Dockerfile
-
   postgres:
     build:
       context: .
