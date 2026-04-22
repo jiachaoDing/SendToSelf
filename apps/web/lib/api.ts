@@ -18,6 +18,14 @@ export type TimelineItem = {
   } | null;
 };
 
+export type BootstrapResponse = {
+  auth: {
+    loginPath: string;
+    setupPath: string;
+    requiresSetup: boolean;
+  };
+};
+
 function withApiBasePath(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path;

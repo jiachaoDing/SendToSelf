@@ -47,7 +47,6 @@
 PORT=4000
 HOST=0.0.0.0
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/send_to_self
-APP_PASSWORD=change-me
 JWT_SECRET=replace-with-a-long-random-string
 INSTANCE_NAME=Send to Self
 UPLOAD_DIR=./uploads
@@ -67,7 +66,8 @@ SERVER_INTERNAL_API_BASE_URL=http://127.0.0.1:4000
 - `NEXT_PUBLIC_APP_ORIGIN` 应设置为用户实际访问的公开地址
 - `SERVER_INTERNAL_API_BASE_URL` 是 Next.js 到服务端的内部地址，通常不需要暴露到公网
 - `UPLOAD_DIR` 应指向持久化目录
-- 生产环境必须替换默认的 `APP_PASSWORD` 和 `JWT_SECRET`
+- 生产环境必须设置强随机 `JWT_SECRET`
+- 新实例首次访问 Web 时，需要先通过 `/setup` 设置主密码
 
 ## Build
 

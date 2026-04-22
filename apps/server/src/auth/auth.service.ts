@@ -1,11 +1,10 @@
 import {
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
-  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { eq } from 'drizzle-orm';
@@ -18,30 +17,34 @@ import { DevicesService } from '../devices/devices.service';
 import { extractRequestAuth } from './auth-token.util';
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
-    private readonly configService: ConfigService,
     private readonly clientConfigService: ClientConfigService,
     private readonly devicesService: DevicesService,
     private readonly jwtService: JwtService,
   ) {}
 
-  async onModuleInit() {
-    const password = this.configService.getOrThrow<string>('APP_PASSWORD');
-    const passwordHash = await hash(password, 10);
-    const existing = await this.db.query.appConfig.findFirst({
-      where: eq(appConfig.id, 1),
-    });
+  async isInitialized() {
+    return (await this.getConfig()) !== undefined;
+  }
 
-    if (existing) {
-      await this.db
-        .update(appConfig)
-        .set({ passwordHash, updatedAt: new Date() })
-        .where(eq(appConfig.id, 1));
-      return;
+  async assertInitialized() {
+    if (!(await this.isInitialized())) {
+      throw new ConflictException('Authentication setup is required');
     }
+  }
 
+  async assertNotInitialized() {
+    if (await this.isInitialized()) {
+      throw new ConflictException('Authentication is already initialized');
+    }
+  }
+
+  async setup(password: string) {
+    await this.assertNotInitialized();
+
+    const passwordHash = await hash(password, 10);
     await this.db.insert(appConfig).values({
       id: 1,
       passwordHash,
@@ -50,12 +53,10 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(password: string, deviceName: string) {
-    const config = await this.db.query.appConfig.findFirst({
-      where: eq(appConfig.id, 1),
-    });
+    const config = await this.getConfig();
 
     if (!config) {
-      throw new UnauthorizedException('Authentication is not initialized');
+      throw new ConflictException('Authentication setup is required');
     }
 
     const valid = await compare(password, config.passwordHash);
@@ -134,5 +135,11 @@ export class AuthService implements OnModuleInit {
     } catch {
       return;
     }
+  }
+
+  private getConfig() {
+    return this.db.query.appConfig.findFirst({
+      where: eq(appConfig.id, 1),
+    });
   }
 }

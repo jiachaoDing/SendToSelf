@@ -45,7 +45,7 @@ export class ClientConfigService {
     return this.getRemoteClientAllowedOrigins().includes(origin);
   }
 
-  getBootstrapPayload() {
+  getBootstrapPayload(requiresSetup: boolean) {
     const remoteClientEnabled = this.isRemoteClientEnabled();
 
     return {
@@ -58,6 +58,8 @@ export class ClientConfigService {
       },
       auth: {
         loginPath: '/auth/login',
+        setupPath: '/setup',
+        requiresSetup,
         tokenPath: '/auth/token',
         logoutPath: '/auth/logout',
         builtInWeb: 'cookie',

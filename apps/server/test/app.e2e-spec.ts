@@ -1,9 +1,11 @@
 import {
+  ConflictException,
+  ForbiddenException,
   INestApplication,
   UnauthorizedException,
   ValidationPipe,
 } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -14,6 +16,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { SessionAuthGuard } from '../src/auth/guards/session-auth.guard';
 import { ClientConfigService } from '../src/client/client-config.service';
 import { ClientController } from '../src/client/client.controller';
+import { DATABASE } from '../src/database/database.module';
 import { DevicesService } from '../src/devices/devices.service';
 import { MessagesService } from '../src/messages/messages.service';
 import { SyncController } from '../src/sync/sync.controller';
@@ -21,6 +24,7 @@ import { SyncController } from '../src/sync/sync.controller';
 describe('Auth transport smoke', () => {
   let app: INestApplication;
   let authVersion: number;
+  let initialized: boolean;
   let remoteClientEnabled: boolean;
 
   const device = {
@@ -28,8 +32,8 @@ describe('Auth transport smoke', () => {
     name: 'Test Device',
   };
   const attachmentPath = join(
-    'D:\\project\\SendToSelf\\apps\\server\\uploads',
-    '6dc88668-2f1e-4604-b63d-6ef479747e7d.png',
+    'D:\\CursorProject\\SendToSelf\\apps\\server\\uploads',
+    '17cce681acbb61db1276fca9298d31bc',
   );
   const timelineItems = Array.from({ length: 60 }, (_, index) => ({
     id: index + 1,
@@ -48,40 +52,82 @@ describe('Auth transport smoke', () => {
     return `valid-token-v${version}`;
   }
 
+  const login = jest.fn((password: string, deviceName: string) => {
+    void password;
+
+    if (!initialized) {
+      return Promise.reject(
+        new ConflictException('Authentication setup is required'),
+      );
+    }
+
+    return Promise.resolve({
+      token: getToken(authVersion),
+      device: {
+        ...device,
+        name: deviceName,
+      },
+    });
+  });
+  const setup = jest.fn((password: string) => {
+    void password;
+
+    if (initialized) {
+      return Promise.reject(
+        new ConflictException('Authentication is already initialized'),
+      );
+    }
+
+    initialized = true;
+    return Promise.resolve({ ok: true });
+  });
+  const validateToken = jest.fn((token: string) => {
+    if (!token) {
+      return Promise.reject(
+        new UnauthorizedException('Authentication required'),
+      );
+    }
+
+    if (token !== getToken(authVersion)) {
+      return Promise.reject(new UnauthorizedException('Invalid session'));
+    }
+
+    return Promise.resolve({ deviceId: device.id });
+  });
+  const authenticateRequest = jest.fn(
+    (request: { headers?: { authorization?: string; cookie?: string } }) => {
+      const authorization = request.headers?.authorization;
+      if (authorization?.startsWith('Bearer ')) {
+        if (!remoteClientEnabled) {
+          return Promise.reject(
+            new ForbiddenException('Remote clients are disabled'),
+          );
+        }
+        return validateToken(authorization.slice(7));
+      }
+
+      const cookieHeader = request.headers?.cookie ?? '';
+      const match = cookieHeader.match(/sts_session=([^;]+)/);
+      return validateToken(match?.[1] ?? '');
+    },
+  );
+  const revokeToken = jest.fn((token?: string) => {
+    if (token === getToken(authVersion)) {
+      authVersion += 1;
+    }
+
+    return Promise.resolve();
+  });
   const authService = {
-    login: jest.fn((_password: string, deviceName: string) =>
-      Promise.resolve({
-        token: getToken(authVersion),
-        device: {
-          ...device,
-          name: deviceName,
-        },
-      }),
-    ),
-    validateToken: jest.fn((token: string) => {
-      if (!token) {
-        return Promise.reject(
-          new UnauthorizedException('Authentication required'),
-        );
-      }
-
-      if (token !== getToken(authVersion)) {
-        return Promise.reject(new UnauthorizedException('Invalid session'));
-      }
-
-      return Promise.resolve({ deviceId: device.id });
-    }),
-    revokeToken: jest.fn((token?: string) => {
-      if (token === getToken(authVersion)) {
-        authVersion += 1;
-      }
-
-      return Promise.resolve();
-    }),
+    login,
+    setup,
+    validateToken,
+    authenticateRequest,
+    revokeToken,
   };
   const clientConfigService = {
     isRemoteClientEnabled: jest.fn(() => remoteClientEnabled),
-    getBootstrapPayload: jest.fn(() => ({
+    getBootstrapPayload: jest.fn((requiresSetup: boolean) => ({
       instance: {
         name: 'Send to Self',
         version: '0.0.1',
@@ -91,6 +137,8 @@ describe('Auth transport smoke', () => {
       },
       auth: {
         loginPath: '/auth/login',
+        setupPath: '/setup',
+        requiresSetup,
         tokenPath: '/auth/token',
         logoutPath: '/auth/logout',
         builtInWeb: 'cookie',
@@ -163,9 +211,25 @@ describe('Auth transport smoke', () => {
       }),
     ),
   };
+  const database = {
+    query: {
+      appConfig: {
+        findFirst: jest.fn(() =>
+          Promise.resolve(
+            initialized
+              ? {
+                  id: 1,
+                  passwordHash: 'hashed-password',
+                }
+              : undefined,
+          ),
+        ),
+      },
+    },
+  };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [
         AuthController,
         AttachmentsController,
@@ -185,6 +249,10 @@ describe('Auth transport smoke', () => {
         {
           provide: ClientConfigService,
           useValue: clientConfigService,
+        },
+        {
+          provide: DATABASE,
+          useValue: database,
         },
         {
           provide: DevicesService,
@@ -211,6 +279,7 @@ describe('Auth transport smoke', () => {
 
   beforeEach(() => {
     authVersion = 1;
+    initialized = true;
     remoteClientEnabled = true;
     jest.clearAllMocks();
   });
@@ -248,6 +317,107 @@ describe('Auth transport smoke', () => {
     expect(sessionResponse.body).toEqual({
       device,
     });
+  });
+
+  it('reports setup status through bootstrap before initialization', async () => {
+    initialized = false;
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0];
+
+    const response = await request(httpServer)
+      .get('/client/bootstrap')
+      .expect(200);
+
+    expect(response.body).toEqual({
+      instance: {
+        name: 'Send to Self',
+        version: '0.0.1',
+      },
+      remoteClient: {
+        enabled: true,
+      },
+      auth: {
+        loginPath: '/auth/login',
+        setupPath: '/setup',
+        requiresSetup: true,
+        tokenPath: '/auth/token',
+        logoutPath: '/auth/logout',
+        builtInWeb: 'cookie',
+        remoteClient: 'bearer',
+      },
+      uploads: {
+        maxBytes: 25 * 1024 * 1024,
+      },
+      attachments: {
+        requiresAuth: true,
+      },
+    });
+  });
+
+  it('creates the one-time password through setup', async () => {
+    initialized = false;
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0];
+
+    await request(httpServer)
+      .post('/auth/setup')
+      .send({
+        password: 'change-me',
+      })
+      .expect(201);
+
+    expect(setup).toHaveBeenCalledWith('change-me');
+
+    const bootstrapResponse = await request(httpServer)
+      .get('/client/bootstrap')
+      .expect(200);
+
+    expect(
+      (
+        bootstrapResponse.body as {
+          auth: { requiresSetup: boolean };
+        }
+      ).auth.requiresSetup,
+    ).toBe(false);
+  });
+
+  it('rejects setup after initialization completes', async () => {
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0];
+
+    const response = await request(httpServer)
+      .post('/auth/setup')
+      .send({
+        password: 'change-me',
+      })
+      .expect(409);
+
+    expect((response.body as { message: string }).message).toBe(
+      'Authentication is already initialized',
+    );
+  });
+
+  it('rejects login before setup completes', async () => {
+    initialized = false;
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0];
+
+    await request(httpServer)
+      .post('/auth/login')
+      .send({
+        password: 'change-me',
+        deviceName: device.name,
+      })
+      .expect(409);
+  });
+
+  it('rejects token creation before setup completes', async () => {
+    initialized = false;
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0];
+
+    await request(httpServer)
+      .post('/auth/token')
+      .send({
+        password: 'change-me',
+        deviceName: 'CLI Device',
+      })
+      .expect(409);
   });
 
   it('supports bearer tokens for non-web clients', async () => {
@@ -388,6 +558,8 @@ describe('Auth transport smoke', () => {
       },
       auth: {
         loginPath: '/auth/login',
+        setupPath: '/setup',
+        requiresSetup: false,
         tokenPath: '/auth/token',
         logoutPath: '/auth/logout',
         builtInWeb: 'cookie',

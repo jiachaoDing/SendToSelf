@@ -9,6 +9,7 @@
 - 用聊天时间线统一保存自己发过的内容
 - 支持文本、链接、图片和普通文件
 - 适合自托管、个人使用、轻量跨设备同步
+- 首次访问通过 `/setup` 设置单用户主密码
 - 当前前端只有 Built-in Web
 
 ## Current Status
@@ -27,6 +28,8 @@ pnpm db:generate
 pnpm db:migrate
 pnpm dev
 ```
+
+启动后首次访问 Web 时，先打开 `/setup` 设置主密码，再进入 `/auth/login` 为当前设备登录。
 
 详细配置见 [`docs/development.md`](docs/development.md)。
 

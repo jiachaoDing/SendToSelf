@@ -2,7 +2,11 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch, type TimelineItem } from '../lib/api';
+import {
+  apiFetch,
+  type BootstrapResponse,
+  type TimelineItem,
+} from '../lib/api';
 import { getUploadErrorMessage } from './chat/attachment-utils';
 import { ChatComposer } from './chat/chat-composer';
 import { MessageBubble } from './chat/message-bubble';
@@ -51,6 +55,12 @@ export function ChatClient() {
   useEffect(() => {
     async function initialize() {
       try {
+        const bootstrap = await apiFetch<BootstrapResponse>('/client/bootstrap');
+        if (bootstrap.auth.requiresSetup) {
+          router.replace(bootstrap.auth.setupPath);
+          return;
+        }
+
         const session = await apiFetch<SessionResponse>('/auth/session');
         setDeviceName(session.device.name);
         setDeviceId(session.device.id);
@@ -60,7 +70,7 @@ export function ChatClient() {
         setHasMoreHistory(data.hasMore);
         shouldScrollToBottomRef.current = true;
       } catch {
-        router.replace('/login');
+        router.replace('/auth/login');
       } finally {
         setLoading(false);
       }
@@ -227,7 +237,7 @@ export function ChatClient() {
     setBusy(true);
     try {
       await apiFetch('/auth/logout', { method: 'POST' });
-      router.replace('/login');
+      router.replace('/auth/login');
     } finally {
       setBusy(false);
     }

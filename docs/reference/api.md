@@ -22,11 +22,16 @@
 
 ## Auth and Remote Access
 
+- `POST /auth/setup`
+  - 实例首次初始化主密码
+  - 仅当实例未初始化时可调用
 - `POST /auth/login`
   - 内建 Web 的 cookie 登录入口
+  - 实例已初始化后才可调用
   - 成功后写入 `sts_session` HttpOnly cookie
 - `POST /auth/token`
   - 远程客户端的 Bearer token 获取入口
+  - 实例已初始化后才可调用
   - 成功后返回 `{ token, device }`
   - 当 `REMOTE_CLIENT_ENABLED=false` 时返回 `403`
 - `POST /auth/logout`
@@ -82,6 +87,8 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
   },
   "auth": {
     "loginPath": "/auth/login",
+    "setupPath": "/setup",
+    "requiresSetup": true,
     "tokenPath": "/auth/token",
     "logoutPath": "/auth/logout",
     "builtInWeb": "cookie",
@@ -106,12 +113,36 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
   - 当前实例是否开放远程客户端
 - `auth`
   - 当前最小认证说明
+  - `requiresSetup=true` 表示实例还没有设置主密码
 - `uploads.maxBytes`
   - 当前上传大小限制
 - `attachments.requiresAuth`
   - 附件访问是否需要认证
 
 ## Auth API
+
+### `POST /auth/setup`
+
+请求体：
+
+```json
+{
+  "password": "change-me"
+}
+```
+
+响应体：
+
+```json
+{
+  "ok": true
+}
+```
+
+说明：
+
+- 该接口用于实例首次设置主密码
+- 已初始化实例调用时返回 `409`
 
 ### `POST /auth/login`
 
@@ -138,6 +169,7 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 说明：
 
 - 该接口主要给内建 Web 使用
+- 未初始化实例调用时返回 `409`
 - token 不放在响应体中，而是写入 HttpOnly cookie
 
 ### `POST /auth/token`
@@ -159,6 +191,7 @@ CORS 只影响“浏览器直接跨域请求 NestJS”的场景，不影响：
 说明：
 
 - 该接口主要给远程客户端使用
+- 未初始化实例调用时返回 `409`
 - 当 `REMOTE_CLIENT_ENABLED=false` 时返回 `403`
 
 ### `POST /auth/logout`

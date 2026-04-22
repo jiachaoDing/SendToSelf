@@ -14,6 +14,7 @@ import type { AuthenticatedRequest } from '../common/interfaces/authenticated-re
 import { DevicesService } from '../devices/devices.service';
 import { extractRequestToken } from './auth-token.util';
 import { LoginDto } from './dto/login.dto';
+import { SetupDto } from './dto/setup.dto';
 import { SESSION_COOKIE_NAME } from './auth.constants';
 import { SessionAuthGuard } from './guards/session-auth.guard';
 import { AuthService } from './auth.service';
@@ -32,6 +33,12 @@ export class AuthController {
     private readonly clientConfigService: ClientConfigService,
     private readonly devicesService: DevicesService,
   ) {}
+
+  @Post('setup')
+  async setup(@Body() body: SetupDto) {
+    await this.authService.setup(body.password);
+    return { ok: true };
+  }
 
   @Post('login')
   async login(

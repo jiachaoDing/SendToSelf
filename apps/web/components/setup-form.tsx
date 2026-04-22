@@ -4,11 +4,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, type BootstrapResponse } from '../lib/api';
 
-export function LoginForm() {
+export function SetupForm() {
   const router = useRouter();
   const [checkingBootstrap, setCheckingBootstrap] = useState(true);
   const [password, setPassword] = useState('');
-  const [deviceName, setDeviceName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,8 +15,8 @@ export function LoginForm() {
     async function initialize() {
       try {
         const bootstrap = await apiFetch<BootstrapResponse>('/client/bootstrap');
-        if (bootstrap.auth.requiresSetup) {
-          router.replace(bootstrap.auth.setupPath);
+        if (!bootstrap.auth.requiresSetup) {
+          router.replace(bootstrap.auth.loginPath);
           return;
         }
       } catch {}
@@ -34,17 +33,16 @@ export function LoginForm() {
     setError('');
 
     try {
-      await apiFetch('/auth/login', {
+      const bootstrap = await apiFetch<BootstrapResponse>('/client/bootstrap');
+      await apiFetch('/auth/setup', {
         method: 'POST',
         body: JSON.stringify({
           password,
-          deviceName,
         }),
       });
-
-      router.replace('/');
+      router.replace(bootstrap.auth.loginPath);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '登录失败');
+      setError(submitError instanceof Error ? submitError.message : '初始化失败');
     } finally {
       setBusy(false);
     }
@@ -57,23 +55,8 @@ export function LoginForm() {
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
-        <label className="block text-sm text-stone-600" htmlFor="device-name">
-          设备标识
-        </label>
-        <input
-          className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-500"
-          disabled={busy}
-          id="device-name"
-          onChange={(event) => setDeviceName(event.target.value)}
-          placeholder="例如：Office Laptop"
-          required
-          value={deviceName}
-        />
-      </div>
-
-      <div className="space-y-2">
         <label className="block text-sm text-stone-600" htmlFor="password">
-          密码
+          主密码
         </label>
         <input
           className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-500"
@@ -90,10 +73,10 @@ export function LoginForm() {
 
       <button
         className="w-full rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-white"
-        disabled={busy || !password.trim() || !deviceName.trim()}
+        disabled={busy || !password.trim()}
         type="submit"
       >
-        登录
+        保存主密码
       </button>
     </form>
   );

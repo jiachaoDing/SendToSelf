@@ -44,6 +44,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         return 'UNAUTHORIZED';
       case 404:
         return 'NOT_FOUND';
+      case 409:
+        return 'CONFLICT';
       default:
         return 'ERROR';
     }

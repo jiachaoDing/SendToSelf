@@ -18,6 +18,7 @@
   - schema 与 migration
   - 文件上传到本地磁盘
   - 附件下载/图片访问
+  - 单用户主密码初始化
   - 单用户密码登录
   - 登录时注册设备
   - timeline 历史分页 + 增量拉取
@@ -58,6 +59,9 @@
 
 ## Current Auth Model
 
+- 实例首次使用时通过 `/setup` 设置一次主密码
+- 主密码只以 `bcrypt` 哈希形式存储在 `app_config.password_hash`
+- `app_config` 有记录即视为已初始化，没有记录即视为未初始化
 - 后端认证本体是 JWT token，payload 包含 `deviceId` 与 `authVersion`
 - 内建 Web 使用 cookie，远程客户端使用 bearer
 - `REMOTE_CLIENT_ENABLED=false` 时，实例只保留内建 Web cookie 链路

@@ -40,7 +40,6 @@ pnpm install
 PORT=4000
 HOST=0.0.0.0
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/send_to_self
-APP_PASSWORD=change-me
 JWT_SECRET=replace-with-a-long-random-string
 INSTANCE_NAME=Send to Self
 UPLOAD_DIR=./uploads
@@ -81,6 +80,8 @@ pnpm dev
 - Web: `http://localhost:3000`
 - Server: `http://localhost:4000`
 
+首次访问内建 Web 时，先进入 `/setup` 设置主密码；设置成功后再通过 `/auth/login` 为当前设备登录。
+
 ## Validation
 
 提交前建议至少执行：
@@ -100,7 +101,10 @@ pnpm --filter server test:e2e
 - 点击“手动刷新”，只追加最新消息，不重置已加载历史
 - 发送文本、链接后，消息仍正常出现在列表底部
 - 上传图片、文件时能看到基础进度，成功后 timeline 会刷新出新文件消息
+- 全新数据库启动后，访问 `/` 会先跳到 `/setup`
+- `/setup` 成功后会跳到 `/auth/login`
 - `GET /client/bootstrap` 能正确反映 `REMOTE_CLIENT_ENABLED`
+- `GET /client/bootstrap` 能正确反映 `auth.requiresSetup`
 - `REMOTE_CLIENT_ENABLED=false` 时，`POST /auth/token` 与 Bearer 访问受保护接口会被拒绝
 
 ## PWA Notes
