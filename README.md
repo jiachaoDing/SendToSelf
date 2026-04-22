@@ -10,28 +10,33 @@
 - 支持文本、链接、图片和普通文件
 - 适合自托管、个人使用、轻量跨设备同步
 - 首次访问通过 `/setup` 设置单用户主密码
-- 当前前端只有 Built-in Web
+- 通过实例内建 Web 使用
 
 ## Current Status
 
 当前是 MVP，已经提供可运行的 Web + server 版本，重点放在核心收件箱体验，而不是完整 IM 功能。
 
-目前已经实现的是实例内建的 Web 前端。远程客户端接入能力仍在规划中，暂时还没有独立的远程 Web / 移动端 / 桌面端客户端。
-
 ## Quick Start
 
-准备好 `Node.js`、`pnpm` 和 `PostgreSQL` 后，在仓库根目录执行：
+1. 在仓库根目录启动：
 
 ```powershell
-pnpm install
-pnpm db:generate
-pnpm db:migrate
-pnpm dev
+docker compose up -d --build
 ```
+
+2. 打开 `http://localhost:3000`。
 
 启动后首次访问 Web 时，先打开 `/setup` 设置主密码，再进入 `/auth/login` 为当前设备登录。
 
-详细配置见 [`docs/development.md`](docs/development.md)。
+如果需要修改实例名、数据库名、数据库用户或公开访问地址，再从 `.env.example` 复制出 `.env` 覆盖默认值。
+
+部署细节见 [`docs/deployment.md`](docs/deployment.md)，本地开发见 [`docs/development.md`](docs/development.md)。
+
+Docker 本地源码构建已针对 pnpm monorepo 做缓存优化：
+
+- `pnpm install` 只会在 `pnpm-lock.yaml` 或相关 `package.json` 变化后重建依赖层
+- 重复执行 `docker compose up -d --build` 时，会复用 Docker BuildKit 和 pnpm store 缓存
+- 只改应用源码但不改依赖时，建议继续使用 `docker compose up -d --build` 重新构建当前代码
 
 ## Screenshots
 
@@ -46,7 +51,7 @@ pnpm dev
 - 更好的移动端体验
 - 更稳定的附件能力
 - 更清晰的自托管部署方式
-- 更完整的远程客户端接入
+- 更顺手的升级与备份体验
 
 ## Docs
 

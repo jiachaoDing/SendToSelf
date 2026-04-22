@@ -1,0 +1,76 @@
+services:
+  config:
+    image: alpine:3.21
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-send_to_self}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    command: ["/bin/sh", "/scripts/init-config.sh"]
+    volumes:
+      - runtime-config:/config
+      - ./scripts/docker:/scripts:ro
+
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    depends_on:
+      config:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/scripts/postgres-entrypoint.sh"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - runtime-config:/config:ro
+      - ./scripts/docker:/scripts:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          ". /config/runtime.env && pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      config:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-4000}
+      INSTANCE_NAME: ${INSTANCE_NAME:-Send to Self}
+      UPLOAD_DIR: /data/uploads
+      REMOTE_CLIENT_ENABLED: "false"
+      REMOTE_CLIENT_ALLOWED_ORIGINS: ""
+    entrypoint: ["/bin/sh", "/scripts/server-entrypoint.sh"]
+    volumes:
+      - server-uploads:/data/uploads
+      - runtime-config:/config:ro
+      - ./scripts/docker:/scripts:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_APP_ORIGIN: ${NEXT_PUBLIC_APP_ORIGIN:-http://localhost:3000}
+        SERVER_INTERNAL_API_BASE_URL: http://server:4000
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      NEXT_PUBLIC_APP_ORIGIN: ${NEXT_PUBLIC_APP_ORIGIN:-http://localhost:3000}
+      SERVER_INTERNAL_API_BASE_URL: http://server:4000
+    ports:
+      - "3000:3000"
+
+volumes:
+  runtime-config:
+  postgres-data:
+  server-uploads:
